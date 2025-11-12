@@ -27,17 +27,40 @@ except ImportError:
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
-# Initialize OCR
-ocr = PaddleOCR(use_textline_orientation=True, lang='ch')  # For Chinese card names
-easy_reader = easyocr.Reader(['en'], gpu=False)  # EasyOCR for English quantities (better than Tesseract!)
-easy_reader_cn = None  # Lazily initialized for Chinese fallback
+# Initialize OCR (lazy loading to avoid blocking imports)
+_ocr = None
+_easy_reader = None
+_easy_reader_cn = None
+
+def get_paddle_ocr():
+    """Lazy load PaddleOCR"""
+    global _ocr
+    if _ocr is None:
+        print("[OCR] Initializing PaddleOCR...")
+        _ocr = PaddleOCR(use_textline_orientation=True, lang='ch')
+        print("[OCR] PaddleOCR ready")
+    return _ocr
+
+def get_easy_reader():
+    """Lazy load EasyOCR English reader"""
+    global _easy_reader
+    if _easy_reader is None:
+        print("[OCR] Initializing EasyOCR (English)...")
+        _easy_reader = easyocr.Reader(['en'], gpu=False)
+        print("[OCR] EasyOCR English ready")
+    return _easy_reader
+
+def get_easy_reader_cn():
+    """Lazy load EasyOCR Chinese reader"""
+    global _easy_reader_cn
+    if _easy_reader_cn is None:
+        print("[OCR] Initializing EasyOCR (Chinese)...")
+        _easy_reader_cn = easyocr.Reader(['ch_sim'], gpu=False)
+        print("[OCR] EasyOCR Chinese ready")
+    return _easy_reader_cn
 
 
-def ensure_easy_reader_cn():
-    global easy_reader_cn
-    if easy_reader_cn is None:
-        easy_reader_cn = easyocr.Reader(['ch_sim'], gpu=False)
-    return easy_reader_cn
+# Removed - use get_easy_reader_cn() instead
 
 
 SECTION_COLOR_BGR = (99, 78, 27)  # #1b4e63
@@ -224,7 +247,7 @@ def extract_metadata_position_based(image_path: str, config_path='metadata_regio
         
         # Run PaddleOCR
         try:
-            ocr_result = ocr.ocr(temp_path)
+            ocr_result = get_paddle_ocr().ocr(temp_path)
             texts = []
             if ocr_result:
                 for page in ocr_result:
@@ -392,7 +415,7 @@ def ocr_card_box(image_path: str, box: Tuple[int, int, int, int]) -> Dict:
     quantity_region.save(temp_qty_path)
 
     # EasyOCR - reads x7, x5, etc. perfectly
-    qty_result = easy_reader.readtext(temp_qty_path, detail=0)
+    qty_result = get_easy_reader().readtext(temp_qty_path, detail=0)
     qty_text = ' '.join(qty_result).strip() if qty_result else ''
 
     os.remove(temp_qty_path)
@@ -486,7 +509,7 @@ def parse_with_two_stage(image_path: str):
         metadata_crop = img.crop((0, 0, width, int(height * 0.2)))
         metadata_crop.save("temp_metadata.png")
         
-        metadata_result = ocr.ocr("temp_metadata.png")
+        metadata_result = get_paddle_ocr().ocr("temp_metadata.png")
         
         if metadata_result:
             for page in metadata_result:
@@ -657,7 +680,7 @@ def _paddle_name_ocr(region: Image.Image):
     region.save(temp_name_path)
 
     try:
-        result = ocr.ocr(temp_name_path)
+        result = get_paddle_ocr().ocr(temp_name_path)
         texts = []
         if result:
             for page in result:
@@ -673,7 +696,7 @@ def _paddle_name_ocr(region: Image.Image):
 
 
 def _easyocr_cn(region: Image.Image):
-    reader_cn = ensure_easy_reader_cn()
+    reader_cn = get_easy_reader_cn()
     result = reader_cn.readtext(np.array(region), detail=0)
     cleaned = [text.strip() for text in result if text.strip()]
     card_name = cleaned[0] if cleaned else None
@@ -739,7 +762,7 @@ def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, 
     header_height = max(50, min(int(h * 0.2), 140))
     header_crop = full_image.crop((x + 5, y, x + w - 5, y + header_height))
 
-    reader_cn = ensure_easy_reader_cn()
+    reader_cn = get_easy_reader_cn()
     header_texts = reader_cn.readtext(np.array(header_crop), detail=0)
     normalized = ''.join(header_texts)
     if normalized:
