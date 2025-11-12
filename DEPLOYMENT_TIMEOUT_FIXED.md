@@ -24,7 +24,7 @@ Downloading nvidia_cufft_cu12-11.3.3.83-... (193.1 MB)
 
 ## What Was Fixed
 
-### 1. ✅ Updated `Dockerfile`
+### 1. ✅ Updated `Dockerfile` - Build Timeout Fix
 
 **Before:**
 ```dockerfile
@@ -42,7 +42,24 @@ RUN pip install --no-cache-dir \
     pip install --no-cache-dir -r requirements.txt
 ```
 
-### 2. ✅ Updated `railway.toml`
+### 2. ✅ Updated `Dockerfile` - Healthcheck Fix
+
+**Issue:** Service built successfully but healthcheck failed because `start_server.py` wasn't copied into the Docker image.
+
+**Added:**
+```dockerfile
+# Copy application code
+COPY src/ ./src/
+COPY resources/ ./resources/
+COPY start_server.py .  # ← This was missing!
+```
+
+**Updated CMD:**
+```dockerfile
+CMD ["python", "start_server.py"]
+```
+
+### 3. ✅ Updated `railway.toml`
 
 Added environment variables to ensure CPU-only mode:
 ```toml
@@ -51,10 +68,11 @@ USE_GPU = "false"
 PYTHONUNBUFFERED = "1"
 ```
 
-### 3. ✅ Updated Documentation
+### 4. ✅ Updated Documentation
 
 - `docs/COMPLETE_API_REFERENCE.md` - Added build timeout troubleshooting section
 - `RAILWAY_DEPLOYMENT_FIX.md` - Complete deployment guide
+- `DEPLOYMENT_TIMEOUT_FIXED.md` - This summary (updated with healthcheck fix)
 
 ---
 
@@ -126,11 +144,11 @@ For your API (mostly single-image uploads), CPU mode is perfectly fine!
 
 ## Files Changed
 
-1. ✅ `Dockerfile` - CPU-only PyTorch installation
+1. ✅ `Dockerfile` - CPU-only PyTorch + copy start_server.py + updated CMD
 2. ✅ `railway.toml` - Environment variables
 3. ✅ `docs/COMPLETE_API_REFERENCE.md` - Troubleshooting section
 4. 📄 `RAILWAY_DEPLOYMENT_FIX.md` - Detailed deployment guide (new)
-5. 📄 `DEPLOYMENT_TIMEOUT_FIXED.md` - This summary (new)
+5. 📄 `DEPLOYMENT_TIMEOUT_FIXED.md` - This summary (updated)
 
 ---
 
@@ -152,10 +170,14 @@ See `RAILWAY_DEPLOYMENT_FIX.md` for detailed troubleshooting.
 
 ## Summary
 
-✅ **Problem identified:** CUDA libraries causing 8-10 GB Docker image  
-✅ **Solution applied:** CPU-only PyTorch (3-4 GB Docker image)  
-✅ **Build time reduced:** From 15-20 min to 5-8 min  
-✅ **Railway deployment:** Will now succeed within 10-minute timeout  
+✅ **Problem 1 Fixed:** CUDA libraries causing 8-10 GB Docker image  
+✅ **Solution:** CPU-only PyTorch (3-4 GB Docker image)  
+✅ **Build time reduced:** From 15-20 min to 4-5 min  
+✅ **Build now succeeds:** Within Railway's 10-minute timeout  
+
+✅ **Problem 2 Fixed:** Healthcheck failing (service not starting)  
+✅ **Solution:** Copy `start_server.py` into Docker image  
+✅ **Service now starts:** Healthcheck will pass  
 
 **Push your changes and watch Railway deploy successfully!** 🚀
 

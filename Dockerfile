@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY src/ ./src/
 COPY resources/ ./resources/
+COPY start_server.py .
 
 # Create necessary directories
 RUN mkdir -p /app/uploads /app/temp /app/logs
@@ -47,5 +48,6 @@ ENV PYTHONUNBUFFERED=1 \
     SERVICE_PORT=8002
 
 # Run application
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8002"]
+# Railway will use the startCommand from railway.toml, but this is the fallback
+CMD ["python", "start_server.py"]
 
