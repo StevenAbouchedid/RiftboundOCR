@@ -36,27 +36,39 @@ def get_paddle_ocr():
     """Lazy load PaddleOCR"""
     global _ocr
     if _ocr is None:
-        print("[OCR] Initializing PaddleOCR...")
-        _ocr = PaddleOCR(use_textline_orientation=True, lang='ch')
-        print("[OCR] PaddleOCR ready")
+        print("[OCR] Initializing PaddleOCR... This may take 20-40 seconds on first run.")
+        try:
+            _ocr = PaddleOCR(use_textline_orientation=True, lang='ch')
+            print("[OCR] PaddleOCR ready")
+        except Exception as e:
+            print(f"[OCR ERROR] Failed to initialize PaddleOCR: {e}")
+            raise RuntimeError(f"Failed to initialize PaddleOCR: {e}")
     return _ocr
 
 def get_easy_reader():
     """Lazy load EasyOCR English reader"""
     global _easy_reader
     if _easy_reader is None:
-        print("[OCR] Initializing EasyOCR (English)...")
-        _easy_reader = easyocr.Reader(['en'], gpu=False)
-        print("[OCR] EasyOCR English ready")
+        print("[OCR] Initializing EasyOCR (English)... This may take 20-30 seconds on first run.")
+        try:
+            _easy_reader = easyocr.Reader(['en'], gpu=False)
+            print("[OCR] EasyOCR English ready")
+        except Exception as e:
+            print(f"[OCR ERROR] Failed to initialize EasyOCR English: {e}")
+            raise RuntimeError(f"Failed to initialize EasyOCR English reader: {e}")
     return _easy_reader
 
 def get_easy_reader_cn():
     """Lazy load EasyOCR Chinese reader"""
     global _easy_reader_cn
     if _easy_reader_cn is None:
-        print("[OCR] Initializing EasyOCR (Chinese)...")
-        _easy_reader_cn = easyocr.Reader(['ch_sim'], gpu=False)
-        print("[OCR] EasyOCR Chinese ready")
+        print("[OCR] Initializing EasyOCR (Chinese)... This may take 30-60 seconds on first run.")
+        try:
+            _easy_reader_cn = easyocr.Reader(['ch_sim'], gpu=False)
+            print("[OCR] EasyOCR Chinese ready")
+        except Exception as e:
+            print(f"[OCR ERROR] Failed to initialize EasyOCR Chinese: {e}")
+            raise RuntimeError(f"Failed to initialize EasyOCR Chinese reader: {e}")
     return _easy_reader_cn
 
 
@@ -762,9 +774,13 @@ def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, 
     header_height = max(50, min(int(h * 0.2), 140))
     header_crop = full_image.crop((x + 5, y, x + w - 5, y + header_height))
 
-    reader_cn = get_easy_reader_cn()
-    header_texts = reader_cn.readtext(np.array(header_crop), detail=0)
-    normalized = ''.join(header_texts)
+    try:
+        reader_cn = get_easy_reader_cn()
+        header_texts = reader_cn.readtext(np.array(header_crop), detail=0)
+        normalized = ''.join(header_texts) if header_texts else ''
+    except Exception as e:
+        print(f"[WARNING] Failed to read section header: {e}")
+        normalized = ''
     if normalized:
         print(f"    [Header OCR] Section {index}: {normalized}")
 
