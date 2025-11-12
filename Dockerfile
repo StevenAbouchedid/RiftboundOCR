@@ -8,13 +8,12 @@ WORKDIR /app
 
 # Install system dependencies for OpenCV and OCR
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
-    libgthread-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python packages
@@ -32,9 +31,9 @@ RUN mkdir -p /app/uploads /app/temp /app/logs
 # Expose port
 EXPOSE 8002
 
-# Health check
+# Health check (Railway uses its own healthcheck path, but this is a backup)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8002/api/v1/health', timeout=5)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8002/api/v1/health', timeout=5)"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
