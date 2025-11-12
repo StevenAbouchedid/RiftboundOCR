@@ -1,0 +1,81 @@
+# Docker Compose for RiftboundOCR Service
+# Complete deployment stack with model caching
+
+version: '3.8'
+
+services:
+  ocr-service:
+    build: .
+    container_name: riftbound-ocr
+    ports:
+      - "8002:8002"
+    environment:
+      # Service Configuration
+      - SERVICE_HOST=0.0.0.0
+      - SERVICE_PORT=8002
+      - DEBUG=false
+      
+      # OCR Settings
+      - USE_GPU=false
+      - ENABLE_LOGGING=true
+      
+      # Main API Integration (configure if needed)
+      - MAIN_API_URL=${MAIN_API_URL:-}
+      - MAIN_API_KEY=${MAIN_API_KEY:-}
+      
+      # File Limits
+      - MAX_FILE_SIZE_MB=10
+      - MAX_BATCH_SIZE=10
+    
+    volumes:
+      # Cache OCR models to avoid re-downloading
+      - ocr-paddleocr:/root/.paddlex
+      - ocr-easyocr:/root/.EasyOCR
+      
+      # Optional: Mount local test images
+      # - ./test_images:/app/test_images:ro
+      
+      # Optional: Mount logs directory
+      # - ./logs:/app/logs
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8002/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    
+    # Resource limits (adjust based on your server)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+volumes:
+  # Persistent volumes for OCR models
+  ocr-paddleocr:
+    driver: local
+  ocr-easyocr:
+    driver: local
+
+# Optional: Add Redis for job queue (future enhancement)
+# services:
+#   redis:
+#     image: redis:7-alpine
+#     container_name: riftbound-redis
+#     ports:
+#       - "6379:6379"
+#     volumes:
+#       - redis-data:/data
+#     restart: unless-stopped
+#
+# volumes:
+#   redis-data:
+#     driver: local
+

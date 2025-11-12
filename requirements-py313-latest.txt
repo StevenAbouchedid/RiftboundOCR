@@ -1,0 +1,38 @@
+# RiftboundOCR Service - Python 3.13 with Latest Versions
+# This attempts to use the latest versions that might support numpy 2.x
+
+# Install numpy 2.1+ first (has Python 3.13 support)
+numpy>=2.1.0
+
+# Try latest versions of OCR engines (may support numpy 2.x)
+paddlepaddle>=3.0.0
+paddleocr  # Latest version (no pin)
+easyocr>=1.7.2
+
+# Image Processing
+pillow>=10.4.0
+opencv-python>=4.10.0
+
+# Fuzzy Matching
+rapidfuzz>=3.10.0
+
+# API Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# HTTP Client
+httpx>=0.27.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+
+# Development
+python-dotenv>=1.0.0
+
+
+
+

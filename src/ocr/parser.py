@@ -1,0 +1,513 @@
+"""
+FINAL Two-Stage Parser with Gap-Based Card Detection
+Stage 1: Detect section regions by color (#1b4e63)
+Stage 2: Detect individual cards by finding background gaps
+"""
+import cv2
+import numpy as np
+from PIL import Image
+from paddleocr import PaddleOCR
+import easyocr
+import tempfile
+import sys
+import re
+from typing import List, Dict, Tuple
+import os
+from collections import defaultdict
+
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
+# Initialize OCR
+ocr = PaddleOCR(use_textline_orientation=True, lang='ch')  # For Chinese card names
+easy_reader = easyocr.Reader(['en'], gpu=False)  # EasyOCR for English quantities (better than Tesseract!)
+easy_reader_cn = None  # Lazily initialized for Chinese fallback
+
+
+def ensure_easy_reader_cn():
+    global easy_reader_cn
+    if easy_reader_cn is None:
+        easy_reader_cn = easyocr.Reader(['ch_sim'], gpu=False)
+    return easy_reader_cn
+
+
+SECTION_COLOR_BGR = (99, 78, 27)  # #1b4e63
+BACKGROUND_COLOR_BGR = (80, 57, 1)  # #013950
+
+def detect_section_regions(image_path: str, tolerance=15):
+    """Stage 1: Detect large section regions by color"""
+    img = cv2.imread(image_path)
+    if img is None:
+        return []
+    
+    height, width = img.shape[:2]
+    
+    lower = np.array([max(0, c - tolerance) for c in SECTION_COLOR_BGR])
+    upper = np.array([min(255, c + tolerance) for c in SECTION_COLOR_BGR])
+    mask = cv2.inRange(img, lower, upper)
+    
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    sections = []
+    min_area = (width * height) * 0.05
+    
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > min_area:
+            x, y, w, h = cv2.boundingRect(contour)
+            sections.append({
+                'box': (x, y, w, h),
+                'area': area,
+                'center_y': y + h/2
+            })
+    
+    sections.sort(key=lambda s: s['center_y'])
+    return sections
+
+def detect_card_boxes_in_section(image_path: str, section_box: Tuple[int, int, int, int]):
+    """
+    Stage 2: Detect individual card boxes by finding background gaps
+    """
+    x, y, w, h = section_box
+    
+    img = cv2.imread(image_path)
+    section_img = img[y:y+h, x:x+w]
+    
+    # Detect BACKGROUND (gaps between cards)
+    tolerance = 15
+    bg_lower = np.array([max(0, c - tolerance) for c in BACKGROUND_COLOR_BGR])
+    bg_upper = np.array([min(255, c + tolerance) for c in BACKGROUND_COLOR_BGR])
+    bg_mask = cv2.inRange(section_img, bg_lower, bg_upper)
+    
+    # Invert to get card regions
+    card_regions = cv2.bitwise_not(bg_mask)
+    
+    # Clean up
+    kernel = np.ones((5,5), np.uint8)
+    card_regions = cv2.morphologyEx(card_regions, cv2.MORPH_CLOSE, kernel, iterations=2)
+    card_regions = cv2.morphologyEx(card_regions, cv2.MORPH_OPEN, kernel, iterations=1)
+    
+    # Find contours
+    contours, _ = cv2.findContours(card_regions, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Filter for card-sized regions
+    card_boxes = []
+    
+    for contour in contours:
+        cx, cy, cw, ch = cv2.boundingRect(contour)
+        area = cv2.contourArea(contour)
+        aspect = cw / ch if ch > 0 else 0
+        
+        min_aspect = 1.8
+        max_aspect = 6.0
+        min_width = w * 0.30
+        max_width = w * 0.52
+        min_height = 35
+        max_height = max(150, h * 0.15)  # At least 150px or 15% of height
+        min_area = 8000
+        
+        if (min_aspect < aspect < max_aspect and
+            min_width < cw < max_width and
+            min_height < ch < max_height and
+            area > min_area):
+            
+            abs_box = (x + cx, y + cy, cw, ch)
+            card_boxes.append(abs_box)
+    
+    # Sort by position (top to bottom, left to right)
+    card_boxes.sort(key=lambda b: (b[1], b[0]))
+    
+    return card_boxes
+
+def ocr_card_box(image_path: str, box: Tuple[int, int, int, int]) -> Dict:
+    """OCR a single card box with position-aware quantity detection"""
+    x, y, w, h = box
+
+    img = Image.open(image_path)
+    cropped = img.crop((x, y, x + w, y + h))
+
+    # Extract name with fallback handling
+    card_name, name_texts, name_method = extract_name_with_fallback(cropped, w, h)
+
+    # RIGHT 11%: Quantity region - starts exactly where the name region ends
+    # Name covers 25%-89%; quantity starts at 89%
+    split_point = int(w * 0.89)
+    quantity_region = cropped.crop((split_point, 0, w, h))
+
+    # Use EasyOCR - works perfectly without any preprocessing!
+    temp_qty = tempfile.NamedTemporaryFile(suffix='_qty.png', delete=False)
+    temp_qty_path = temp_qty.name
+    temp_qty.close()
+    quantity_region.save(temp_qty_path)
+
+    # EasyOCR - reads x7, x5, etc. perfectly
+    qty_result = easy_reader.readtext(temp_qty_path, detail=0)
+    qty_text = ' '.join(qty_result).strip() if qty_result else ''
+
+    os.remove(temp_qty_path)
+
+    quantity = 1  # Default: empty = quantity 1
+
+    # Parse quantity from EasyOCR output
+    if qty_text:
+        if re.search(r'[xX]?\d+', qty_text):
+            qty_match = re.search(r'\d+', qty_text)
+            if qty_match:
+                qty_val = int(qty_match.group())
+                if 1 <= qty_val <= 12:
+                    quantity = qty_val
+
+    confidence = 0.0
+
+    return {
+        'name_cn': card_name,
+        'quantity': quantity,
+        'confidence': confidence,
+        'name_texts': name_texts,
+        'name_method': name_method,
+        'qty_text': qty_text
+    }
+
+def identify_section_type(section_index: int, section_area: float, all_areas: List[float], card_count: int = 0) -> str:
+    """Identify section type by size and position"""
+    sorted_areas = sorted(all_areas, reverse=True)
+    
+    if section_area == sorted_areas[0]:
+        return 'legend_main'  # Largest (top)
+    
+    # After main deck, sections appear in order: Battlefields, Runes, Side Deck
+    # Battlefields: typically 3 cards, medium area
+    # Runes: typically 6-12 cards (6 unique), medium-large area  
+    # Side Deck: typically 0-8 cards, smallest area
+    
+    # Use position (section_index) since sections are sorted by Y-coordinate
+    if section_index == 2:
+        return 'battlefields'  # Second section
+    elif section_index == 3:
+        return 'runes'  # Third section (or could be side deck if no runes)
+    else:
+        return 'side_deck'  # Fourth section or last
+
+def parse_with_two_stage(image_path: str):
+    """
+    Complete two-stage parsing
+    """
+    print("="*60)
+    print("TWO-STAGE PARSER - FINAL VERSION")
+    print("="*60)
+    
+    result = {
+        'player': None,
+        'legend_name': None,
+        'event': None,
+        'date': None,
+        'placement': None,
+        'cards': {
+            'legend': [],
+            'main_deck': [],
+            'battlefields': [],
+            'runes': [],
+            'side_deck': []
+        }
+    }
+    
+    # Extract metadata
+    print("\n[Stage 0] Extracting metadata...")
+    img = Image.open(image_path)
+    width, height = img.size
+    
+    metadata_crop = img.crop((0, 0, width, int(height * 0.2)))
+    metadata_crop.save("temp_metadata.png")
+    
+    metadata_result = ocr.ocr("temp_metadata.png")
+    
+    if metadata_result:
+        for page in metadata_result:
+            texts = []
+            if hasattr(page, 'rec_texts'):
+                texts = page.rec_texts or []
+            elif isinstance(page, dict):
+                texts = page.get('rec_texts', [])
+            
+            for text in texts:
+                if '排名' in text or (re.match(r'^\d+$', text) and len(text) <= 3):
+                    match = re.search(r'\d+', text)
+                    if match and not result.get('placement'):
+                        result['placement'] = int(match.group())
+                
+                elif re.search(r'\d{4}-\d{2}-\d{2}', text):
+                    result['date'] = re.search(r'\d{4}-\d{2}-\d{2}', text).group()
+                
+                elif '区域公开赛' in text or '赛区' in text:
+                    result['event'] = text
+                
+                elif text in ['卡莎', '德莱厄斯', '阿狸', '盖伦', '艾希', '索拉卡', '提莫', '亚索']:
+                    if not result['legend_name']:
+                        result['legend_name'] = text
+    
+    print(f"  Placement: {result.get('placement')}")
+    print(f"  Event: {result.get('event')}")
+    print(f"  Date: {result.get('date')}")
+    
+    # Stage 1: Detect sections
+    print("\n[Stage 1] Detecting section regions...")
+    sections = detect_section_regions(image_path)
+    print(f"  Found {len(sections)} sections")
+    
+    full_image = Image.open(image_path)
+
+    all_areas = [s['area'] for s in sections]
+    section_counts = defaultdict(int)
+
+    section_groups = []
+
+    # Stage 2: Process each section
+    print("\n[Stage 2] Detecting individual card boxes...")
+
+    total_boxes = 0
+
+    for i, section in enumerate(sections, 1):
+        section_type = classify_section_type(full_image, section['box'], i, all_areas)
+
+        print(f"\n  Section {i} ({section_type}):")
+
+        card_boxes = detect_card_boxes_in_section(image_path, section['box'])
+        print(f"    Found {len(card_boxes)} card boxes")
+        total_boxes += len(card_boxes)
+
+        cards_in_section = []
+
+        for j, card_box in enumerate(card_boxes, 1):
+            card_data = ocr_card_box(image_path, card_box)
+            if card_data['name_cn']:
+                # Set battlefields quantity to 1
+                if section_type == 'battlefields':
+                    card_data['quantity'] = 1
+                card_data['section_index'] = i
+                card_data['section_type'] = section_type
+                cards_in_section.append(card_data)
+
+        section_groups.append((section_type, cards_in_section))
+
+    print(f"\n  Total card boxes across all sections: {total_boxes}")
+
+    # Consolidate sections with heuristics to avoid duplicates
+    def deduplicate_cards(cards):
+        unique = {}
+        ordered = []
+        for card in cards:
+            name = card['name_cn']
+            if not name:
+                continue
+            if name not in unique:
+                unique[name] = card
+                ordered.append(card)
+            else:
+                # Keep max quantity to handle duplicates
+                unique[name]['quantity'] = max(unique[name]['quantity'], card['quantity'])
+        return ordered
+
+    # Merge legend/main deck first
+    legend_groups = [cards for stype, cards in section_groups if stype == 'legend_main']
+    if legend_groups:
+        primary = legend_groups[0]
+        if primary:
+            result['cards']['legend'].append(primary[0])
+            result['cards']['legend'][0]['quantity'] = 1
+            result['cards']['main_deck'].extend(primary[1:])
+        # Merge any additional legend sections into main deck
+        for extra in legend_groups[1:]:
+            if extra:
+                result['cards']['main_deck'].extend(extra)
+
+    # Battlefields
+    battlefield_cards = []
+    for stype, cards in section_groups:
+        if stype == 'battlefields':
+            battlefield_cards.extend(cards)
+    result['cards']['battlefields'] = deduplicate_cards(battlefield_cards)[:3]
+
+    # Collect runes and side deck candidates
+    rune_cards = []
+    side_deck_candidates = []
+    for stype, cards in section_groups:
+        if stype == 'runes':
+            rune_cards.extend(cards)
+        elif stype == 'side_deck':
+            side_deck_candidates.append(cards)
+
+    # Any cards with "符文" in the name belong to runes
+    for cards in side_deck_candidates:
+        rune_like = [card for card in cards if '符文' in card['name_cn']]
+        normal = [card for card in cards if '符文' not in card['name_cn']]
+        if rune_like:
+            rune_cards.extend(rune_like)
+        if normal:
+            result['cards']['side_deck'].extend(normal)
+
+    result['cards']['runes'] = deduplicate_cards(rune_cards)
+    result['cards']['side_deck'] = deduplicate_cards(result['cards']['side_deck'])
+
+    # Any remaining sections (e.g., misclassified main deck pieces) should fall back into main deck
+    already_handled_sections = {'legend_main', 'battlefields', 'runes', 'side_deck'}
+    for stype, cards in section_groups:
+        if stype not in already_handled_sections:
+            result['cards']['main_deck'].extend(cards)
+
+    result['cards']['main_deck'] = deduplicate_cards(result['cards']['main_deck'])
+
+    # Cleanup (most temp files are now in system temp directory)
+    for temp_file in ["temp_metadata.png"]:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+    
+    # Print results
+    print("\n" + "="*60)
+    print("RESULTS")
+    print("="*60)
+    
+    for section, cards in result['cards'].items():
+        if cards:
+            total = sum(c['quantity'] for c in cards)
+            expected = {'legend': 1, 'main_deck': 40, 'battlefields': 3, 'runes': 12, 'side_deck': '0-8'}
+            status = "✓" if (section == 'legend' and total == 1) or \
+                           (section == 'main_deck' and total == 40) or \
+                           (section == 'battlefields' and total == 3) or \
+                           (section == 'runes' and total == 12) or \
+                           (section == 'side_deck' and total <= 8) else "✗"
+            
+            print(f"\n{status} {section.upper().replace('_', ' ')}: {total} cards (expected: {expected[section]})")
+            for card in cards:
+                print(f"  {card['quantity']}x {card['name_cn']}")
+    
+    return result
+
+def _paddle_name_ocr(region: Image.Image):
+    temp_name_file = tempfile.NamedTemporaryFile(suffix='_name.png', delete=False)
+    temp_name_path = temp_name_file.name
+    temp_name_file.close()
+    region.save(temp_name_path)
+
+    try:
+        result = ocr.ocr(temp_name_path)
+        texts = []
+        if result:
+            for page in result:
+                if hasattr(page, 'rec_texts'):
+                    texts = page.rec_texts or []
+                elif isinstance(page, dict):
+                    texts = page.get('rec_texts', [])
+        card_name = _extract_card_name_from_texts(texts)
+        return card_name, texts
+    finally:
+        if os.path.exists(temp_name_path):
+            os.remove(temp_name_path)
+
+
+def _easyocr_cn(region: Image.Image):
+    reader_cn = ensure_easy_reader_cn()
+    result = reader_cn.readtext(np.array(region), detail=0)
+    cleaned = [text.strip() for text in result if text.strip()]
+    card_name = cleaned[0] if cleaned else None
+    return card_name, cleaned
+
+
+def _extract_card_name_from_texts(texts):
+    accumulated = ''
+    for text in texts:
+        cleaned = text.strip()
+        if cleaned in ['传奇牌', '主牌组', '战场牌', '符文牌', '备牌']:
+            continue
+        if re.match(r'^[xX]?\d+$', cleaned):
+            continue
+        cleaned = re.sub(r'\s*[xX]\d+\s*', '', cleaned).strip()
+        if cleaned and not re.match(r'^[\d\sxX]+$', cleaned):
+            accumulated += cleaned
+            if len(accumulated) >= 2:
+                return accumulated
+    return accumulated or None
+
+
+def extract_name_with_fallback(cropped: Image.Image, w: int, h: int):
+    """Extract card name using PaddleOCR with fallbacks."""
+    name_regions = [
+        (cropped.crop((int(w * 0.25), 0, int(w * 0.89), h)), 'paddle_25_89'),
+        (cropped.crop((int(w * 0.20), 0, int(w * 0.92), h)), 'paddle_20_92'),
+        (cropped, 'paddle_full'),
+    ]
+
+    for region, label in name_regions:
+        card_name, texts = _paddle_name_ocr(region)
+        if card_name and len(card_name) >= 2:
+            return card_name, texts, label
+
+    # Fallback: EasyOCR Chinese
+    card_name, texts = _easyocr_cn(name_regions[0][0])
+    if card_name and len(card_name) >= 2:
+        return card_name, texts, 'easyocr_cn'
+
+    return None, [], 'failed'
+
+
+HEADER_KEYWORDS = {
+    'legend': ['传奇'],
+    'main_deck': ['主牌'],
+    'battlefields': ['战场'],
+    'runes': ['符文'],
+    'side_deck': ['备牌']
+}
+
+SECTION_LIMITS = {
+    'legend_main': 1,
+    'battlefields': 1,
+    'runes': 1,
+    'side_deck': 1
+}
+
+
+def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, int, int], index: int,
+                           all_areas: List[float]) -> str:
+    x, y, w, h = section_box
+    header_height = max(50, min(int(h * 0.2), 140))
+    header_crop = full_image.crop((x + 5, y, x + w - 5, y + header_height))
+
+    reader_cn = ensure_easy_reader_cn()
+    header_texts = reader_cn.readtext(np.array(header_crop), detail=0)
+    normalized = ''.join(header_texts)
+    if normalized:
+        print(f"    [Header OCR] Section {index}: {normalized}")
+
+    if normalized:
+        if any(key in normalized for key in HEADER_KEYWORDS['legend']):
+            return 'legend_main'
+        if any(key in normalized for key in HEADER_KEYWORDS['battlefields']):
+            return 'battlefields'
+        if any(key in normalized for key in HEADER_KEYWORDS['runes']):
+            return 'runes'
+        if any(key in normalized for key in HEADER_KEYWORDS['side_deck']):
+            return 'side_deck'
+        if any(key in normalized for key in HEADER_KEYWORDS['main_deck']):
+            return 'legend_main'
+
+    # Fallback to area-based ordering
+    sorted_areas = sorted(all_areas, reverse=True)
+    section_area = w * h
+    if section_area == sorted_areas[0]:
+        return 'legend_main'
+    elif section_area == sorted_areas[1]:
+        return 'battlefields'
+    elif section_area == sorted_areas[2]:
+        return 'runes'
+    else:
+        return 'side_deck'
+
+
+if __name__ == "__main__":
+    test_image = "test image.jpg"
+    if len(sys.argv) > 1:
+        test_image = sys.argv[1]
+    
+    result = parse_with_two_stage(test_image)
+
+
+
