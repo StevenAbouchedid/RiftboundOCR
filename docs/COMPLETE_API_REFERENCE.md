@@ -1362,7 +1362,34 @@ restartPolicyMaxRetries = 3
 SERVICE_HOST = "0.0.0.0"
 SERVICE_PORT = "8002"
 PYTHONUNBUFFERED = "1"
+USE_GPU = "false"
 ```
+
+#### ⚠️ Build Timeout Issues
+
+**Problem:** Docker build times out with "Build timed out" error.
+
+**Cause:** The default PyTorch installation includes **3.5GB+ of CUDA libraries** even in CPU-only mode.
+
+**Solution:** The Dockerfile is optimized to install CPU-only PyTorch:
+```dockerfile
+# Install CPU-only PyTorch FIRST (much smaller)
+RUN pip install --no-cache-dir \
+    torch==2.9.1+cpu \
+    torchvision==0.24.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
+```
+
+**Image Size Comparison:**
+- With CUDA (default): ~8-10 GB, 15+ min build time
+- CPU-only (optimized): ~3-4 GB, 5-8 min build time
+
+**Railway Build Limits:**
+- Free tier: 10 minute timeout
+- Pro tier: 30 minute timeout
+
+If builds still timeout, increase build timeout in Railway settings or use a pre-built image.
 
 #### Estimated Costs
 

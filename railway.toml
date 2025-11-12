@@ -16,3 +16,6 @@ periodSeconds = 30
 timeoutSeconds = 10
 failureThreshold = 3
 
+[env]
+USE_GPU = "false"
+PYTHONUNBUFFERED = "1"
