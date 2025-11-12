@@ -3,6 +3,7 @@ Configuration Management
 Loads settings from environment variables
 """
 
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -12,7 +13,8 @@ class Settings(BaseSettings):
     
     # Service Configuration
     service_host: str = "0.0.0.0"
-    service_port: int = 8002
+    # Railway uses PORT, we use SERVICE_PORT - check both
+    service_port: int = int(os.getenv("PORT") or os.getenv("SERVICE_PORT") or "8002")
     debug: bool = False
     
     # OCR Settings
