@@ -13,6 +13,7 @@
 paddlepaddle==3.0.0
 paddleocr==2.9.1
 easyocr==1.7.2
+pytesseract==0.3.13  # For numeric field fallback in metadata extraction
 
 # Image Processing
 pillow==10.4.0

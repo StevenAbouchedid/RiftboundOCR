@@ -6,8 +6,33 @@ Convert Chinese decklist screenshots to structured deck objects with English car
 
 **Input:** Chinese decklist image (JPG/PNG)  
 **Output:** Structured JSON with English card names and metadata  
-**Accuracy:** 93%+ average  
+**Accuracy:** 93-96% card matching, 96% metadata extraction  
 **Processing Time:** 30-60 seconds per image
+
+---
+
+## 📚 **Complete Documentation**
+
+### **🌟 [Complete API Reference & Hosting Guide](docs/COMPLETE_API_REFERENCE.md)** ⭐
+**The definitive technical documentation** covering:
+- ✅ All API routes with detailed examples
+- ✅ Request/response schemas (TypeScript)
+- ✅ Hosting guide (Railway, Docker, VPS)
+- ✅ Environment configuration
+- ✅ Performance & scaling strategies
+- ✅ Error handling & troubleshooting
+
+### **Frontend Integration**
+- [Frontend Metadata Guide](docs/FRONTEND_METADATA_GUIDE.md) - Complete integration guide with React/Vue examples
+- [Frontend Quick Summary](FRONTEND_METADATA_SUMMARY.md) - Quick reference for new metadata fields
+
+### **More Documentation**
+- [Documentation Index](docs/README.md) - Browse all documentation
+- [Quick Start Guide](QUICK_START.md) - Get running in 5 minutes
+- [Deployment Guide](DEPLOYMENT.md) - Production deployment
+- [Troubleshooting](TROUBLESHOOTING.md) - Common issues
+
+---
 
 ## 🚀 Quick Start
 

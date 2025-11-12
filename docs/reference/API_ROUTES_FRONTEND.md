@@ -1,5 +1,9 @@
 # RiftboundOCR API Routes - Frontend Integration Guide
 
+> **🆕 METADATA UPDATE (Nov 2025):** Major improvement! API now returns complete tournament metadata including player names, deck names, and placement with 96% accuracy. See [Frontend Metadata Guide](../FRONTEND_METADATA_GUIDE.md) for complete integration details.
+
+---
+
 ## 🎯 Service Overview
 
 **RiftboundOCR is a SEPARATE microservice from the main Riftbound Top Decks API.**
@@ -261,11 +265,12 @@ Content-Type: multipart/form-data
     "processing_time_seconds": 45.2
   },
   "metadata": {
-    "player": null,
-    "legend_name": null,
-    "event": null,
-    "date": null,
-    "placement": null
+    "player": "Ai.闪闪",                    // 🆕 Player name (100% accuracy)
+    "deck_name": "卡莎",                    // 🆕 Deck/Legend name (90% accuracy)
+    "placement": 1,                         // ✅ Improved (100% accuracy)
+    "event": "第一赛季区域公开赛-北京赛区",    // ✅ Improved (95% accuracy)
+    "date": "2025-08-30",                   // ✅ Improved (95% accuracy)
+    "legend_name_en": "Kai'Sa, Daughter of the Void"  // 🆕 English legend name
   }
 }
 ```

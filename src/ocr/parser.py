@@ -11,9 +11,18 @@ import easyocr
 import tempfile
 import sys
 import re
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import os
 from collections import defaultdict
+import json
+
+# Try to import pytesseract for numeric field fallback
+try:
+    import pytesseract
+    TESSERACT_AVAILABLE = True
+except ImportError:
+    TESSERACT_AVAILABLE = False
+    print("[WARNING] pytesseract not installed - numeric field fallback disabled")
 
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -33,6 +42,248 @@ def ensure_easy_reader_cn():
 
 SECTION_COLOR_BGR = (99, 78, 27)  # #1b4e63
 BACKGROUND_COLOR_BGR = (80, 57, 1)  # #013950
+
+# Metadata extraction colors
+METADATA_BG_COLOR_HEX = '#1e3044'
+MAIN_DECK_BG_COLOR_HEX = '#013950'
+
+
+# ============================================================================
+# POSITION-BASED METADATA EXTRACTION (from other agent repo)
+# ============================================================================
+
+def detect_metadata_boundary(img_pil, skip_top_percent=10, sample_x_percent=5):
+    """
+    Automatically detect metadata section boundary using color detection
+    
+    Args:
+        img_pil: PIL Image object
+        skip_top_percent: Skip top X% (to avoid status bar)
+        sample_x_percent: Sample at X% from left edge
+    
+    Returns:
+        boundary_y: Y coordinate where metadata section ends
+    """
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def color_distance(c1, c2):
+        """Euclidean distance between two RGB colors"""
+        return sum((int(a) - int(b)) ** 2 for a, b in zip(c1, c2)) ** 0.5
+    
+    img_array = np.array(img_pil)
+    height, width = img_array.shape[:2]
+    
+    metadata_rgb = hex_to_rgb(METADATA_BG_COLOR_HEX)
+    main_rgb = hex_to_rgb(MAIN_DECK_BG_COLOR_HEX)
+    
+    skip_rows = int(height * (skip_top_percent / 100))
+    sample_x = int(width * (sample_x_percent / 100))
+    
+    main_color_consecutive = 0
+    required_consecutive = 5  # Need 5 consecutive main_color pixels to confirm
+    
+    # Scan down the left edge
+    for y in range(skip_rows, height):
+        pixel = img_array[y, sample_x][:3]  # Get RGB
+        dist_to_main = color_distance(pixel, main_rgb)
+        dist_to_metadata = color_distance(pixel, metadata_rgb)
+        
+        # Is this pixel closer to main deck color?
+        if dist_to_main < dist_to_metadata and dist_to_main < 30:  # Threshold
+            main_color_consecutive += 1
+            if main_color_consecutive >= required_consecutive:
+                # Found boundary! Back up to first main_color pixel
+                return y - required_consecutive + 1
+        else:
+            main_color_consecutive = 0
+    
+    # Fallback to 20% if no clear boundary found
+    return int(height * 0.20)
+
+
+def extract_metadata_field_tesseract(image_path, field_name):
+    """
+    Fallback OCR for numeric fields using Tesseract with digit-only config
+    
+    Tesseract PSM (Page Segmentation Mode) options:
+    - 6: Assume uniform block of text (default)
+    - 7: Treat image as single text line
+    - 8: Treat image as single word
+    - 10: Treat image as single character (BEST for single digit)
+    - 13: Raw line (bypass all preprocessing)
+    
+    Returns extracted number or None
+    """
+    if not TESSERACT_AVAILABLE:
+        return None
+    
+    try:
+        img = Image.open(image_path)
+        
+        # Preprocessing for better OCR
+        img_gray = img.convert('L')  # Convert to grayscale
+        enlarged = img_gray.resize(
+            (img.width * 4, img.height * 4), 
+            Image.LANCZOS
+        )  # Upscale 4x for better recognition
+        
+        # Try multiple PSM modes with digits-only whitelist
+        psm_modes = [
+            (10, "single character"),  # Best for "1", "2", etc
+            (8, "single word"),        # For "15", "32", etc
+            (7, "single line"),        # Fallback
+            (13, "raw line")           # Last resort
+        ]
+        
+        for psm, desc in psm_modes:
+            # CRITICAL: tessedit_char_whitelist=0123456789
+            # This FORCES Tesseract to only output digits!
+            custom_config = f'--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789'
+            result = pytesseract.image_to_string(enlarged, config=custom_config).strip()
+            
+            if result and result.isdigit():
+                return result
+        
+        # Fallback: Try without whitelist to see what Tesseract sees
+        result = pytesseract.image_to_string(enlarged, config='--oem 3 --psm 10').strip()
+        
+        # Extract any digits from result
+        if result:
+            digits = re.findall(r'\d+', result)
+            if digits:
+                return digits[0]
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+def extract_metadata_position_based(image_path: str, config_path='metadata_regions_config_new.json'):
+    """
+    Extract metadata using position-based regions with auto boundary detection
+    
+    Returns dict with: player, deck_name, event, date, placement, legend_name
+    """
+    # Load config
+    try:
+        # Try config path relative to script
+        if not os.path.exists(config_path):
+            # Try relative to project root
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), config_path)
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print(f"  [Metadata] Config not found at {config_path}, using pattern-based fallback")
+        return None
+    
+    # Load image
+    img = Image.open(image_path)
+    full_width, full_height = img.size
+    
+    # Auto-detect metadata boundary
+    metadata_height = detect_metadata_boundary(img)
+    metadata_section = img.crop((0, 0, full_width, metadata_height))
+    
+    result = {
+        'player': None,
+        'deck_name': None,
+        'event': None,
+        'date': None,
+        'placement': None,
+        'legend_name': None
+    }
+    
+    # Extract each field
+    for field_name in ['player', 'deck_name', 'event', 'date', 'placement']:
+        if field_name not in config.get('regions', {}):
+            continue
+        
+        region = config['regions'][field_name]
+        section_width, section_height = metadata_section.size
+        
+        # Calculate crop using percentages
+        x = int(section_width * float(region['x_percent']) / 100)
+        y = int(section_height * float(region['y_percent']) / 100)
+        w = int(section_width * float(region['width_percent']) / 100)
+        h = int(section_height * float(region['height_percent']) / 100)
+        
+        # Bounds checking
+        x = max(0, min(x, section_width))
+        y = max(0, min(y, section_height))
+        w = max(1, min(w, section_width - x))
+        h = max(1, min(h, section_height - y))
+        
+        # Crop the specific field region
+        crop = metadata_section.crop((x, y, x+w, y+h))
+        temp_path = f"temp_{field_name}_crop.png"
+        crop.save(temp_path)
+        
+        # Run PaddleOCR
+        try:
+            ocr_result = ocr.ocr(temp_path)
+            texts = []
+            if ocr_result:
+                for page in ocr_result:
+                    if hasattr(page, 'rec_texts'):
+                        texts.extend(page.rec_texts or [])
+                    elif isinstance(page, dict):
+                        texts.extend(page.get('rec_texts', []))
+                    elif isinstance(page, list):
+                        for item in page:
+                            if isinstance(item, list) and len(item) >= 2:
+                                texts.append(item[1][0] if isinstance(item[1], tuple) else item[1])
+            
+            if texts:
+                combined_text = ' '.join(texts).strip()
+                
+                # Field-specific processing and validation
+                if field_name == 'placement':
+                    # MUST be a number
+                    match = re.search(r'\d+', combined_text)
+                    if match and match.group().isdigit():
+                        result[field_name] = int(match.group())
+                    else:
+                        # Validation failed - try Tesseract
+                        fallback = extract_metadata_field_tesseract(temp_path, field_name)
+                        if fallback:
+                            result[field_name] = int(fallback)
+                
+                elif field_name == 'date':
+                    # MUST match YYYY-MM-DD format
+                    match = re.search(r'\d{4}-\d{2}-\d{2}', combined_text)
+                    if match:
+                        result[field_name] = match.group()
+                
+                else:
+                    # For player, event, deck_name - accept as-is
+                    result[field_name] = combined_text
+            
+            elif field_name == 'placement':
+                # No text from PaddleOCR - try Tesseract directly
+                fallback = extract_metadata_field_tesseract(temp_path, field_name)
+                if fallback:
+                    result[field_name] = int(fallback)
+        
+        except Exception as e:
+            print(f"  [Metadata] Error extracting {field_name}: {e}")
+        
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+    
+    return result
+
+# ============================================================================
+# END POSITION-BASED METADATA EXTRACTION
+# ============================================================================
 
 def detect_section_regions(image_path: str, tolerance=15):
     """Stage 1: Detect large section regions by color"""
@@ -211,43 +462,60 @@ def parse_with_two_stage(image_path: str):
         }
     }
     
-    # Extract metadata
+    # Extract metadata using position-based extraction
     print("\n[Stage 0] Extracting metadata...")
-    img = Image.open(image_path)
-    width, height = img.size
     
-    metadata_crop = img.crop((0, 0, width, int(height * 0.2)))
-    metadata_crop.save("temp_metadata.png")
+    # Try position-based extraction first
+    metadata = extract_metadata_position_based(image_path)
     
-    metadata_result = ocr.ocr("temp_metadata.png")
-    
-    if metadata_result:
-        for page in metadata_result:
-            texts = []
-            if hasattr(page, 'rec_texts'):
-                texts = page.rec_texts or []
-            elif isinstance(page, dict):
-                texts = page.get('rec_texts', [])
-            
-            for text in texts:
-                if '排名' in text or (re.match(r'^\d+$', text) and len(text) <= 3):
-                    match = re.search(r'\d+', text)
-                    if match and not result.get('placement'):
-                        result['placement'] = int(match.group())
+    if metadata:
+        # Position-based extraction successful
+        print("  ✓ Using position-based extraction")
+        result['player'] = metadata.get('player')
+        result['placement'] = metadata.get('placement')
+        result['event'] = metadata.get('event')
+        result['date'] = metadata.get('date')
+        if metadata.get('deck_name'):
+            result['legend_name'] = metadata.get('deck_name')
+    else:
+        # Fallback to pattern-based extraction
+        print("  ⚠ Using pattern-based fallback")
+        img = Image.open(image_path)
+        width, height = img.size
+        
+        metadata_crop = img.crop((0, 0, width, int(height * 0.2)))
+        metadata_crop.save("temp_metadata.png")
+        
+        metadata_result = ocr.ocr("temp_metadata.png")
+        
+        if metadata_result:
+            for page in metadata_result:
+                texts = []
+                if hasattr(page, 'rec_texts'):
+                    texts = page.rec_texts or []
+                elif isinstance(page, dict):
+                    texts = page.get('rec_texts', [])
                 
-                elif re.search(r'\d{4}-\d{2}-\d{2}', text):
-                    result['date'] = re.search(r'\d{4}-\d{2}-\d{2}', text).group()
-                
-                elif '区域公开赛' in text or '赛区' in text:
-                    result['event'] = text
-                
-                elif text in ['卡莎', '德莱厄斯', '阿狸', '盖伦', '艾希', '索拉卡', '提莫', '亚索']:
-                    if not result['legend_name']:
-                        result['legend_name'] = text
+                for text in texts:
+                    if '排名' in text or (re.match(r'^\d+$', text) and len(text) <= 3):
+                        match = re.search(r'\d+', text)
+                        if match and not result.get('placement'):
+                            result['placement'] = int(match.group())
+                    
+                    elif re.search(r'\d{4}-\d{2}-\d{2}', text):
+                        result['date'] = re.search(r'\d{4}-\d{2}-\d{2}', text).group()
+                    
+                    elif '区域公开赛' in text or '赛区' in text:
+                        result['event'] = text
+                    
+                    elif text in ['卡莎', '德莱厄斯', '阿狸', '盖伦', '艾希', '索拉卡', '提莫', '亚索']:
+                        if not result['legend_name']:
+                            result['legend_name'] = text
     
     print(f"  Placement: {result.get('placement')}")
     print(f"  Event: {result.get('event')}")
     print(f"  Date: {result.get('date')}")
+    print(f"  Player: {result.get('player')}")
     
     # Stage 1: Detect sections
     print("\n[Stage 1] Detecting section regions...")

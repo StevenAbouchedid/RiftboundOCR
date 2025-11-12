@@ -48,16 +48,22 @@ class CardData(BaseModel):
 class DecklistMetadata(BaseModel):
     """Metadata extracted from decklist image"""
     
+    player: Optional[str] = Field(None, description="Player name")
+    deck_name: Optional[str] = Field(None, description="Deck name / Legend name")
     placement: Optional[int] = Field(None, description="Tournament placement/rank")
     event: Optional[str] = Field(None, description="Event name")
     date: Optional[str] = Field(None, description="Event date")
+    legend_name_en: Optional[str] = Field(None, description="Matched English legend name")
     
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "placement": 92,
-                "event": "第一赛季区域公开赛-杭州赛区",
-                "date": "2025-09-13"
+                "player": "Ai.闪闪",
+                "deck_name": "卡莎",
+                "placement": 1,
+                "event": "第一赛季区域公开赛-北京赛区",
+                "date": "2025-08-30",
+                "legend_name_en": "Kai'Sa, Daughter of the Void"
             }
         }
     )

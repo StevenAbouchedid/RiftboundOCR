@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📍 Metadata Region Editor</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .instructions li {
+            margin: 5px 0;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        .file-input {
+            margin-bottom: 15px;
+        }
+
+        .field-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: 2px solid #ccc;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #f5f5f5;
+        }
+
+        button.active {
+            border-color: #2196f3;
+            background: #2196f3;
+            color: white;
+        }
+
+        .field-player.active { background: rgba(0, 255, 0, 0.7); border-color: rgba(0, 255, 0, 0.9); }
+        .field-event.active { background: rgba(255, 0, 0, 0.7); border-color: rgba(255, 0, 0, 0.9); }
+        .field-placement.active { background: rgba(0, 0, 255, 0.7); border-color: rgba(0, 0, 255, 0.9); }
+        .field-deck_name.active { background: rgba(255, 255, 0, 0.7); border-color: rgba(255, 255, 0, 0.9); }
+        .field-date.active { background: rgba(255, 0, 255, 0.7); border-color: rgba(255, 0, 255, 0.9); }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .export-btn {
+            background: #4caf50;
+            color: white;
+            border-color: #4caf50;
+        }
+
+        .export-btn:hover {
+            background: #45a049;
+        }
+
+        .clear-btn {
+            background: #f44336;
+            color: white;
+            border-color: #f44336;
+        }
+
+        .clear-btn:hover {
+            background: #da190b;
+        }
+
+        .canvas-container {
+            margin: 20px 0;
+            overflow: auto;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #canvas {
+            cursor: crosshair;
+            display: block;
+        }
+
+        .coordinates {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            min-height: 150px;
+        }
+
+        .coordinates strong {
+            color: #2196f3;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            border: 2px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📍 Metadata Region Editor</h1>
+        
+        <div class="instructions">
+            <strong>How to use this tool:</strong>
+            <ol>
+                <li>First, run: <code>python detect_metadata_boundary.py "your_image.jpg" --crop</code></li>
+                <li>Upload the generated <code>metadata_section_auto_crop.png</code> using the file input below</li>
+                <li>Click a field button (Player, Event, etc.)</li>
+                <li>Draw a rectangle around that field on the image</li>
+                <li>Repeat for all 5 fields</li>
+                <li>Click "Export Config" to save <code>metadata_regions_config_new.json</code></li>
+            </ol>
+        </div>
+
+        <div class="controls">
+            <div class="file-input">
+                <input type="file" id="imageUpload" accept="image/*">
+            </div>
+
+            <div class="field-buttons">
+                <button class="field-player" data-field="player">🟢 Player</button>
+                <button class="field-event" data-field="event">🔴 Event</button>
+                <button class="field-placement" data-field="placement">🔵 Placement</button>
+                <button class="field-deck_name" data-field="deck_name">🟡 Deck Name</button>
+                <button class="field-date" data-field="date">🟣 Date</button>
+            </div>
+
+            <div class="action-buttons">
+                <button class="export-btn" id="exportConfig">💾 Export Config</button>
+                <button class="clear-btn" id="clearAll">🗑️ Clear All</button>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="coordinates" id="coordinates">
+            <em>Draw a region to see coordinates...</em>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(0, 255, 0, 0.3);"></div>
+                <span>Player</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(255, 0, 0, 0.3);"></div>
+                <span>Event</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(0, 0, 255, 0.3);"></div>
+                <span>Placement</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(255, 255, 0, 0.3);"></div>
+                <span>Deck Name</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(255, 0, 255, 0.3);"></div>
+                <span>Date</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let img = null;
+        let currentField = null;
+        let regions = {
+            player: null,
+            event: null,
+            placement: null,
+            deck_name: null,
+            date: null
+        };
+
+        const colors = {
+            player: 'rgba(0, 255, 0, 0.3)',
+            event: 'rgba(255, 0, 0, 0.3)',
+            placement: 'rgba(0, 0, 255, 0.3)',
+            deck_name: 'rgba(255, 255, 0, 0.3)',
+            date: 'rgba(255, 0, 255, 0.3)'
+        };
+
+        // Load image
+        document.getElementById('imageUpload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    redraw();
+                };
+                img.src = event.target.result;
+            };
+            
+            reader.readAsDataURL(file);
+        });
+
+        // Select field to draw
+        document.querySelectorAll('[data-field]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                currentField = e.target.dataset.field;
+                // Highlight active button
+                document.querySelectorAll('[data-field]').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        // Drawing logic
+        let isDrawing = false;
+        let startX, startY;
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!currentField || !img) return;
+            
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            // Calculate dimensions
+            const x = Math.min(startX, currentX);
+            const y = Math.min(startY, currentY);
+            const width = Math.abs(currentX - startX);
+            const height = Math.abs(currentY - startY);
+            
+            // Update temporary region
+            regions[currentField] = { x, y, width, height };
+            
+            redraw();
+            updateCoordinateDisplay(currentField);
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        function redraw() {
+            // Clear and redraw image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            
+            // Draw all regions
+            for (const [field, region] of Object.entries(regions)) {
+                if (region) {
+                    ctx.fillStyle = colors[field];
+                    ctx.fillRect(region.x, region.y, region.width, region.height);
+                    
+                    // Draw border
+                    ctx.strokeStyle = colors[field].replace('0.3', '1');
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(region.x, region.y, region.width, region.height);
+                    
+                    // Draw label
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(field, region.x + 5, region.y + 20);
+                    ctx.fillText(field, region.x + 5, region.y + 20);
+                }
+            }
+        }
+
+        function updateCoordinateDisplay(field) {
+            const region = regions[field];
+            if (!region) return;
+            
+            const xPercent = (region.x / img.width * 100).toFixed(2);
+            const yPercent = (region.y / img.height * 100).toFixed(2);
+            const widthPercent = (region.width / img.width * 100).toFixed(2);
+            const heightPercent = (region.height / img.height * 100).toFixed(2);
+            
+            document.getElementById('coordinates').innerHTML = `
+                <strong>${field.toUpperCase()}</strong><br>
+                Pixels: X=${Math.round(region.x)}, Y=${Math.round(region.y)}, W=${Math.round(region.width)}, H=${Math.round(region.height)}<br>
+                Percent: X=${xPercent}%, Y=${yPercent}%, W=${widthPercent}%, H=${heightPercent}%<br>
+                <br>
+                <strong>All Regions:</strong><br>
+                ${Object.entries(regions).map(([f, r]) => r ? `✓ ${f}` : `✗ ${f}`).join('<br>')}
+            `;
+        }
+
+        // Export configuration
+        document.getElementById('exportConfig').addEventListener('click', () => {
+            if (!img) {
+                alert('Please load an image first!');
+                return;
+            }
+
+            // Check if all fields are drawn
+            const missing = Object.entries(regions).filter(([f, r]) => !r).map(([f]) => f);
+            if (missing.length > 0) {
+                if (!confirm(`Missing regions: ${missing.join(', ')}. Continue anyway?`)) {
+                    return;
+                }
+            }
+            
+            const config = {
+                image_size: {
+                    width: img.width,
+                    height: img.height
+                },
+                metadata_section_info: {
+                    note: "These regions are drawn on a CROPPED metadata section, not the full image",
+                    assumption: "This is the TOP portion of the full image (auto-detected boundary)",
+                    metadata_percentage: "Variable (auto-detected)"
+                },
+                regions: {}
+            };
+            
+            for (const [field, region] of Object.entries(regions)) {
+                if (region) {
+                    config.regions[field] = {
+                        x: Math.round(region.x),
+                        y: Math.round(region.y),
+                        width: Math.round(region.width),
+                        height: Math.round(region.height),
+                        x_percent: (region.x / img.width * 100).toFixed(2),
+                        y_percent: (region.y / img.height * 100).toFixed(2),
+                        width_percent: (region.width / img.width * 100).toFixed(2),
+                        height_percent: (region.height / img.height * 100).toFixed(2)
+                    };
+                }
+            }
+            
+            // Download as JSON
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'metadata_regions_config_new.json';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            alert('Config exported! Place metadata_regions_config_new.json in your project root.');
+        });
+
+        // Clear all regions
+        document.getElementById('clearAll').addEventListener('click', () => {
+            if (confirm('Clear all regions?')) {
+                regions = {
+                    player: null,
+                    event: null,
+                    placement: null,
+                    deck_name: null,
+                    date: null
+                };
+                currentField = null;
+                document.querySelectorAll('[data-field]').forEach(b => b.classList.remove('active'));
+                if (img) {
+                    redraw();
+                }
+                document.getElementById('coordinates').innerHTML = '<em>All regions cleared. Draw a region to start...</em>';
+            }
+        });
+    </script>
+</body>
+</html>
+

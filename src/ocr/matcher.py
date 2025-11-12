@@ -192,6 +192,7 @@ class CardMatcher:
         matched = {
             'metadata': {
                 'player': parsed_decklist.get('player'),
+                'deck_name': parsed_decklist.get('legend_name'),  # Also map to deck_name
                 'legend_name': parsed_decklist.get('legend_name'),
                 'event': parsed_decklist.get('event'),
                 'date': parsed_decklist.get('date'),

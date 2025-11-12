@@ -1,0 +1,65 @@
+{
+  "image_size": {
+    "width": 1080,
+    "height": 757
+  },
+  "metadata_section_info": {
+    "note": "These regions are drawn on a CROPPED metadata section, not the full image",
+    "assumption": "This is the TOP 20% of the full image",
+    "full_image_height_estimate": 3785,
+    "metadata_percentage": 20
+  },
+  "regions": {
+    "player": {
+      "x": 144,
+      "y": 598,
+      "width": 651,
+      "height": 138,
+      "x_percent": "13.31",
+      "y_percent": "78.99",
+      "width_percent": "60.28",
+      "height_percent": "18.27"
+    },
+    "event": {
+      "x": 85,
+      "y": 374,
+      "width": 451,
+      "height": 67,
+      "x_percent": "7.86",
+      "y_percent": "49.34",
+      "width_percent": "41.79",
+      "height_percent": "8.86"
+    },
+    "placement": {
+      "x": 884,
+      "y": 246,
+      "width": 161,
+      "height": 87,
+      "x_percent": "81.86",
+      "y_percent": "32.49",
+      "width_percent": "14.88",
+      "height_percent": "11.49"
+    },
+    "deck_name": {
+      "x": 26,
+      "y": 252,
+      "width": 883,
+      "height": 115,
+      "x_percent": "2.42",
+      "y_percent": "33.26",
+      "width_percent": "81.75",
+      "height_percent": "15.21"
+    },
+    "date": {
+      "x": 613,
+      "y": 377,
+      "width": 295,
+      "height": 67,
+      "x_percent": "56.79",
+      "y_percent": "49.78",
+      "width_percent": "27.30",
+      "height_percent": "8.86"
+    }
+  }
+}
+
