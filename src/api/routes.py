@@ -85,18 +85,36 @@ except Exception as e:
     _ocr_paddle = None
 
 print("\n[3/3] Pre-loading EasyOCR (English/numeric recognition)...")
-print("      Skipping EasyOCR pre-load to speed up startup")
-print("      EasyOCR will load on-demand when needed for metadata extraction")
-_ocr_easy = None  # Skip pre-loading EasyOCR (loaded lazily when needed)
-print("✓ EasyOCR configured for lazy loading")
+print("      This downloads ~100MB of models on first run (60-90 seconds)")
+print("      Subsequent starts will be instant (models cached)")
+print("      ⚠ This prevents 20+ second timeouts on first request!")
+
+try:
+    from src.ocr.parser import get_easy_ocr
+    start = time.time()
+    _ocr_easy = get_easy_ocr()  # Force initialization NOW
+    elapsed = time.time() - start
+    print(f"✓ EasyOCR ready ({elapsed:.1f}s)")
+    logger.info(f"EasyOCR pre-loaded in {elapsed:.1f}s")
+except Exception as e:
+    print(f"⚠ WARNING: EasyOCR initialization failed: {e}")
+    print("   Quantity detection will be unavailable!")
+    import traceback
+    traceback.print_exc()
+    logger.warning(f"EasyOCR init failed: {e}", exc_info=True)
+    _ocr_easy = None
 
 print("\n" + "=" * 60)
-if _ocr_paddle:
-    print("✅ CORE OCR MODELS PRE-LOADED - SERVICE READY!")
+if _ocr_paddle and _ocr_easy:
+    print("✅ ALL OCR MODELS PRE-LOADED - SERVICE READY!")
     print("   PaddleOCR: ✓ Ready (Chinese text)")
-    print("   EasyOCR: ⏳ Lazy load (English/numeric)")
+    print("   EasyOCR: ✓ Ready (English/numeric)")
+elif _ocr_paddle:
+    print("⚠️  PARTIAL OCR INITIALIZATION - PaddleOCR only")
+    print("   PaddleOCR: ✓ Ready (Chinese text)")
+    print("   EasyOCR: ❌ Failed (quantity detection unavailable)")
 else:
-    print("⚠️  OCR INITIALIZATION INCOMPLETE - Service may not work")
+    print("❌ OCR INITIALIZATION FAILED - Service will not work")
 print("=" * 60 + "\n")
 logger.info("OCR service components initialization complete")
 
@@ -208,14 +226,27 @@ async def process_single_image(file: UploadFile = File(...)):
         tmp_path = tmp.name
     
     try:
-        logger.info(f"Processing image: {file.filename}")
+        # Memory monitoring
+        import psutil
+        process = psutil.Process()
+        mem_before = process.memory_info().rss / 1024 / 1024  # MB
+        print(f"[MEMORY] Before OCR: {mem_before:.1f}MB")
+        logger.info(f"Processing image: {file.filename} (Memory: {mem_before:.1f}MB)")
         
         # Stage 1: Parse image (using direct function from working implementation)
+        print(f"[OCR] Starting parse_with_two_stage for {file.filename}")
         parsed = parse_with_two_stage(tmp_path)
+        
+        mem_after_parse = process.memory_info().rss / 1024 / 1024
+        print(f"[MEMORY] After parsing: {mem_after_parse:.1f}MB (delta: +{mem_after_parse - mem_before:.1f}MB)")
         logger.info(f"Parsing complete. Extracted {sum(len(parsed.get(s, [])) for s in ['legend', 'main_deck', 'battlefields', 'runes', 'side_deck'])} card entries")
         
         # Stage 2: Match cards to English
+        print(f"[MATCHING] Starting card matching")
         matched = matcher.match_decklist(parsed)
+        
+        mem_final = process.memory_info().rss / 1024 / 1024
+        print(f"[MEMORY] After matching: {mem_final:.1f}MB (total delta: +{mem_final - mem_before:.1f}MB)")
         logger.info(f"Matching complete. Accuracy: {matched.get('stats', {}).get('accuracy', 0):.2f}%")
         
         # Add unique ID

@@ -66,9 +66,19 @@ print(f"✓ Ready to accept connections on {settings.service_host}:{settings.ser
 print(f"✓ Health check endpoints: /health and /api/v1/health")
 print("=" * 60)
 
+# Memory monitoring setup
+try:
+    import psutil
+    process = psutil.Process()
+    mem_start = process.memory_info().rss / 1024 / 1024
+    print(f"[MEMORY] Process starting with {mem_start:.1f}MB")
+except ImportError:
+    print("[WARNING] psutil not available, memory monitoring disabled")
+
 # Run server with production settings
 try:
     print("[SERVER] Uvicorn starting...")
+    print("[SERVER] If the process crashes during requests, check Railway memory limits!")
     uvicorn.run(
         app,
         host=settings.service_host,
@@ -85,8 +95,15 @@ try:
     print("[SERVER] Uvicorn stopped normally")
 except KeyboardInterrupt:
     print("\n[SERVER] Received keyboard interrupt, shutting down...")
+except MemoryError as e:
+    print(f"\n[CRITICAL] OUT OF MEMORY: {e}")
+    print("[CRITICAL] Railway may have killed the process due to memory exhaustion!")
+    import traceback
+    traceback.print_exc()
+    sys.exit(137)  # Exit code for OOM kill
 except Exception as e:
     print(f"\n[ERROR] Server failed with exception: {e}")
+    print(f"[ERROR] Exception type: {type(e).__name__}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
