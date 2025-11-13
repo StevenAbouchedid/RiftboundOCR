@@ -15,6 +15,7 @@ from typing import List, Dict, Tuple, Optional
 import os
 from collections import defaultdict
 import json
+import hashlib
 
 # Try to import pytesseract for numeric field fallback
 try:
@@ -559,9 +560,29 @@ def parse_with_two_stage(image_path: str):
     
     full_image = Image.open(image_path)
 
+    # Stage 1.5: Classify sections and detect duplicates
+    print("\n[Stage 1.5] Classifying sections...")
     all_areas = [s['area'] for s in sections]
-    section_counts = defaultdict(int)
+    
+    for i, section in enumerate(sections):
+        section_type = classify_section_type(full_image, section['box'], i+1, all_areas)
+        section['type'] = section_type
+        section['y'] = section['box'][1]  # Store y-coordinate for sorting
+    
+    # Detect and remove duplicate sections (common in long screenshots)
+    dedup_result = detect_duplicate_sections(sections, full_image)
+    sections = dedup_result['unique_sections']
+    
+    if dedup_result['duplicates']:
+        print(f"\n[INFO] Removed {len(dedup_result['duplicates'])} duplicate section type(s)")
+        for dup in dedup_result['duplicates']:
+            print(f"   - {dup['count']}x {dup['type']} → kept first occurrence")
+    else:
+        print(f"\n[INFO] No duplicate sections found")
+    
+    print(f"  Processing {len(sections)} unique sections")
 
+    section_counts = defaultdict(int)
     section_groups = []
 
     # Stage 2: Process each section
@@ -570,7 +591,7 @@ def parse_with_two_stage(image_path: str):
     total_boxes = 0
 
     for i, section in enumerate(sections, 1):
-        section_type = classify_section_type(full_image, section['box'], i, all_areas)
+        section_type = section['type']  # Already classified above
 
         print(f"\n  Section {i} ({section_type}):")
 
@@ -766,6 +787,89 @@ SECTION_LIMITS = {
     'runes': 1,
     'side_deck': 1
 }
+
+
+def compute_section_content_hash(image: Image.Image, y_start: int, y_end: int) -> str:
+    """
+    Compute MD5 hash of visual content to detect identical sections.
+    Used for duplicate section detection in long screenshots.
+    """
+    try:
+        section_crop = image.crop((0, y_start, image.width, min(y_end, image.height)))
+        section_array = np.array(section_crop)
+        return hashlib.md5(section_array.tobytes()).hexdigest()
+    except Exception as e:
+        print(f"[WARNING] Failed to compute section hash: {e}")
+        return ""
+
+
+def detect_duplicate_sections(sections: List[Dict], full_image: Image.Image) -> Dict:
+    """
+    Detect if any logical deck sections are duplicated (common in long screenshots).
+    
+    Returns dict with:
+        - unique_sections: list of sections to keep (first occurrence of each type)
+        - duplicates: list of detected duplicate section info
+    """
+    print(f"\n[Duplicate Detection] Checking {len(sections)} sections...")
+    
+    # Group sections by type
+    by_type = {}
+    for idx, section in enumerate(sections):
+        stype = section['type']
+        if stype not in by_type:
+            by_type[stype] = []
+        by_type[stype].append((idx, section))
+    
+    # Find duplicates
+    duplicates = []
+    sections_to_keep = []
+    
+    for stype, occurrences in by_type.items():
+        if len(occurrences) > 1:
+            print(f"\n[DUPLICATE] Found {len(occurrences)}x {stype} sections")
+            
+            # Compute content hashes for each occurrence
+            section_hashes = []
+            for idx, (list_idx, section) in enumerate(occurrences, 1):
+                y_start = section['y']
+                # Estimate end (next section or image end)
+                if list_idx + 1 < len(sections):
+                    y_end = sections[list_idx + 1]['y']
+                else:
+                    y_end = full_image.height
+                
+                content_hash = compute_section_content_hash(full_image, y_start, y_end)
+                section_hashes.append(content_hash)
+                
+                print(f"   Occurrence {idx}: y={y_start}-{y_end}, hash={content_hash[:16]}...")
+            
+            # Check if identical content
+            identical = len(set(section_hashes)) < len(section_hashes)
+            
+            if identical:
+                print(f"   -> IDENTICAL CONTENT: Keeping first occurrence only")
+                duplicates.append({
+                    'type': stype,
+                    'count': len(occurrences),
+                    'kept_index': occurrences[0][0],
+                    'removed_indices': [occ[0] for occ in occurrences[1:]]
+                })
+                # Keep only first occurrence
+                sections_to_keep.append(occurrences[0][1])
+            else:
+                print(f"   -> DIFFERENT CONTENT: Keeping all")
+                # Keep all if they're actually different
+                for _, section in occurrences:
+                    sections_to_keep.append(section)
+        else:
+            # Only one occurrence, keep it
+            sections_to_keep.append(occurrences[0][1])
+    
+    return {
+        'unique_sections': sections_to_keep,
+        'duplicates': duplicates
+    }
 
 
 def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, int, int], index: int,
