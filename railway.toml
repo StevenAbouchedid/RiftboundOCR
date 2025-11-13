@@ -9,6 +9,8 @@ healthcheckTimeout = 300
 sleepApplication = false
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+# Increase request timeout for OCR processing (default is 5-10s)
+requestTimeout = 60
 
 [[deploy.healthcheckProbes]]
 path = "/health"

@@ -211,6 +211,7 @@ async def process_single_image(file: UploadFile = File(...)):
     try:
         # Memory monitoring
         import psutil
+        import asyncio
         process = psutil.Process()
         mem_before = process.memory_info().rss / 1024 / 1024  # MB
         print(f"[MEMORY] Before OCR: {mem_before:.1f}MB")
@@ -218,7 +219,10 @@ async def process_single_image(file: UploadFile = File(...)):
         
         # Stage 1: Parse image (using direct function from working implementation)
         print(f"[OCR] Starting parse_with_two_stage for {file.filename}")
-        parsed = parse_with_two_stage(tmp_path)
+        
+        # Run OCR in thread pool to prevent blocking and allow timeout handling
+        loop = asyncio.get_event_loop()
+        parsed = await loop.run_in_executor(None, parse_with_two_stage, tmp_path)
         
         mem_after_parse = process.memory_info().rss / 1024 / 1024
         print(f"[MEMORY] After parsing: {mem_after_parse:.1f}MB (delta: +{mem_after_parse - mem_before:.1f}MB)")
