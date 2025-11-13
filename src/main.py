@@ -33,13 +33,19 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
-# CORS middleware
+# CORS middleware - Allow production domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
-    allow_credentials=False,
+    allow_origins=[
+        "https://riftboundtopdecks.com",
+        "https://www.riftboundtopdecks.com",
+        "http://localhost:3000",  # Local development
+        "http://localhost:8000",  # Local development
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 

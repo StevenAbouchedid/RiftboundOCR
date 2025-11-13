@@ -6,6 +6,7 @@ dockerfilePath = "Dockerfile"
 startCommand = "python start_server_docker.py"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 120
+sleepApplication = false
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
