@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 COPY resources/ ./resources/
 COPY start_server_docker.py .
+COPY metadata_regions_config_new.json .
 
 # Create necessary directories
 RUN mkdir -p /app/uploads /app/temp /app/logs

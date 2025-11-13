@@ -7,30 +7,24 @@ Convert Chinese decklist screenshots to structured deck objects with English car
 **Input:** Chinese decklist image (JPG/PNG)  
 **Output:** Structured JSON with English card names and metadata  
 **Accuracy:** 93-96% card matching, 96% metadata extraction  
-**Processing Time:** 15-30 seconds per image (DigitalOcean) | 30-60 seconds (local)
+**Processing Time:** 30-40 seconds (GCP Production) | 30-60 seconds (local dev)
 
 ---
 
 ## 🚨 **DEPLOYMENT GUIDES** (Start Here!)
 
-### **⭐ [DigitalOcean Deployment Guide](DIGITALOCEAN_DEPLOYMENT.md)** 
-**Current production deployment** - Complete step-by-step guide:
-- ✅ $12/month dedicated CPU (20x faster than Railway!)
-- ✅ Full Docker setup with Nginx reverse proxy
-- ✅ SSL certificate configuration with Let's Encrypt
-- ✅ Auto-deployment scripts
-- ✅ Performance monitoring
+### **⭐ [GCP Cloud Run - PRODUCTION](GCP_PRODUCTION_REFERENCE.md)** 🚀
+**Current production deployment** - Live service running on GCP:
+- ✅ **30-40 second processing** (20x faster than Railway!)
+- ✅ **4 CPUs + 4GB RAM** (dedicated resources)
+- ✅ **Auto-scaling** with always-warm instance
+- ✅ **$15-25/month** with free tier credit
+- ✅ **Production URL**: `https://riftbound-ocr-660047080116.us-central1.run.app`
 
-### **🔐 [Frontend Integration Reference](DIGITALOCEAN_FRONTEND_REFERENCE.md)**
-**Critical for frontend team** - Includes:
-- ✅ API endpoint configuration (with SSL)
-- ✅ CORS setup and testing
-- ✅ Complete code examples
-- ✅ Server credentials (**SENSITIVE - Not in git**)
-
-### **Alternative Deployments**
-- [GCP Cloud Run Deployment](GCP_CLOUD_RUN_DEPLOYMENT.md) - Serverless with optional GPU ($15-30/month)
-- [Railway Deployment](docs/archive/) - Old deployment (archived, too slow)
+### **📚 Alternative Deployment Options**
+- [GCP Cloud Run Setup Guide](GCP_CLOUD_RUN_DEPLOYMENT.md) - Complete deployment guide with GPU options
+- [DigitalOcean Deployment](DIGITALOCEAN_DEPLOYMENT.md) - Self-hosted VPS ($12/month, moderate speed)
+- [Railway Deployment](docs/archive/) - Archived (too slow for production)
 
 ---
 
@@ -282,10 +276,17 @@ OCR models need 2-4GB RAM. Increase Docker memory or use larger instance.
 
 ## 🎯 Performance
 
-- **Processing Time:** 30-60s per image (CPU)
-- **Accuracy:** 93%+ on average
-- **Throughput:** 60-120 images/hour (single worker)
-- **Memory:** 2-4GB RAM per worker
+### Production (GCP Cloud Run)
+- **Processing Time:** 30-40 seconds per image
+- **Accuracy:** 93-96% card matching
+- **Resources:** 4 vCPUs, 4GB RAM
+- **Throughput:** 90-120 images/hour
+- **Scaling:** Auto-scales 1-10 instances
+
+### Local Development
+- **Processing Time:** 30-60 seconds (varies by CPU)
+- **Memory:** 2-4GB RAM
+- **GPU Supported:** Yes (10x faster)
 
 ## 🤝 Contributing
 
@@ -308,9 +309,10 @@ OCR models need 2-4GB RAM. Increase Docker memory or use larger instance.
 
 ## 📍 Current Status
 
-**Deployment:** ✅ DigitalOcean Droplet (IP: 104.248.221.40)  
-**Domain:** 🔄 Setting up SSL at `ocr.riftboundtopdecks.com`  
-**Performance:** 🚀 15-30 seconds (20x faster than Railway!)  
+**Deployment:** ✅ GCP Cloud Run (Production)  
+**Service URL:** `https://riftbound-ocr-660047080116.us-central1.run.app`  
+**Performance:** 🚀 30-40 seconds (20x faster than Railway!)  
+**Health:** 🟢 Live and Healthy  
 **Version:** 1.0.0  
 **Last Updated:** November 13, 2025
 
