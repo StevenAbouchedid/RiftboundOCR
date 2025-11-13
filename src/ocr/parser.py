@@ -487,6 +487,19 @@ def parse_with_two_stage(image_path: str):
     print("TWO-STAGE PARSER - FINAL VERSION")
     print("="*60)
     
+    # OPTIMIZATION: Resize large images to speed up OCR on slower CPUs
+    img = Image.open(image_path)
+    original_size = img.size
+    max_dimension = 2400  # pixels - balance between quality and speed
+    
+    if max(img.size) > max_dimension:
+        ratio = max_dimension / max(img.size)
+        new_size = tuple(int(dim * ratio) for dim in img.size)
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+        img.save(image_path)  # Overwrite with resized version
+        print(f"[OPTIMIZATION] Resized image: {original_size} → {new_size} ({ratio:.2f}x)")
+        print(f"               This should speed up OCR by ~{1/ratio:.1f}x on slow CPUs")
+    
     result = {
         'player': None,
         'legend_name': None,
