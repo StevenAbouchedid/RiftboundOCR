@@ -87,7 +87,6 @@ try:
         access_log=True,
         # Production settings
         timeout_keep_alive=120,  # Keep-alive timeout for long OCR processing
-        timeout_notify=30,  # Notify clients of timeout after 30s
         limit_concurrency=100,  # Max concurrent connections
         backlog=2048,  # Connection backlog
         # Logging
