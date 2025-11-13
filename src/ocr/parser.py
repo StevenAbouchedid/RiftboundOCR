@@ -828,40 +828,17 @@ def detect_duplicate_sections(sections: List[Dict], full_image: Image.Image) -> 
     for stype, occurrences in by_type.items():
         if len(occurrences) > 1:
             print(f"\n[DUPLICATE] Found {len(occurrences)}x {stype} sections")
+            print(f"   -> Keeping first occurrence only (long screenshot detected)")
             
-            # Compute content hashes for each occurrence
-            section_hashes = []
-            for idx, (list_idx, section) in enumerate(occurrences, 1):
-                y_start = section['y']
-                # Estimate end (next section or image end)
-                if list_idx + 1 < len(sections):
-                    y_end = sections[list_idx + 1]['y']
-                else:
-                    y_end = full_image.height
-                
-                content_hash = compute_section_content_hash(full_image, y_start, y_end)
-                section_hashes.append(content_hash)
-                
-                print(f"   Occurrence {idx}: y={y_start}-{y_end}, hash={content_hash[:16]}...")
-            
-            # Check if identical content
-            identical = len(set(section_hashes)) < len(section_hashes)
-            
-            if identical:
-                print(f"   -> IDENTICAL CONTENT: Keeping first occurrence only")
-                duplicates.append({
-                    'type': stype,
-                    'count': len(occurrences),
-                    'kept_index': occurrences[0][0],
-                    'removed_indices': [occ[0] for occ in occurrences[1:]]
-                })
-                # Keep only first occurrence
-                sections_to_keep.append(occurrences[0][1])
-            else:
-                print(f"   -> DIFFERENT CONTENT: Keeping all")
-                # Keep all if they're actually different
-                for _, section in occurrences:
-                    sections_to_keep.append(section)
+            # Always keep only the first occurrence
+            # Duplicates are from scrolling, not legitimate multiple sections
+            duplicates.append({
+                'type': stype,
+                'count': len(occurrences),
+                'kept_index': occurrences[0][0],
+                'removed_indices': [occ[0] for occ in occurrences[1:]]
+            })
+            sections_to_keep.append(occurrences[0][1])
         else:
             # Only one occurrence, keep it
             sections_to_keep.append(occurrences[0][1])
