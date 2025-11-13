@@ -128,18 +128,14 @@ async def health_simple():
     
     Returns basic status - for full info use /api/v1/health
     """
-    return JSONResponse(
-        content={
-            "status": "healthy",
-            "service": settings.app_name,
-            "version": settings.app_version,
-            "timestamp": __import__("time").time()
-        },
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Connection": "keep-alive"
-        }
-    )
+    # Return plain dict - let CORS middleware add headers
+    import time
+    return {
+        "status": "healthy",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "timestamp": time.time()
+    }
 
 
 @app.exception_handler(Exception)
