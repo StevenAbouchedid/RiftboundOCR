@@ -90,9 +90,9 @@ print("      Subsequent starts will be instant (models cached)")
 print("      ⚠ This prevents 20+ second timeouts on first request!")
 
 try:
-    from src.ocr.parser import get_easy_ocr
+    from src.ocr.parser import get_easy_reader
     start = time.time()
-    _ocr_easy = get_easy_ocr()  # Force initialization NOW
+    _ocr_easy = get_easy_reader()  # Force initialization NOW
     elapsed = time.time() - start
     print(f"✓ EasyOCR ready ({elapsed:.1f}s)")
     logger.info(f"EasyOCR pre-loaded in {elapsed:.1f}s")
