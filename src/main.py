@@ -58,9 +58,37 @@ async def startup_event():
         logger.info(f"Max batch size: {settings.max_batch_size}")
         logger.info("=" * 60)
         logger.info("✓ Application startup complete")
+        
+        # Start background keep-alive logger
+        import asyncio
+        asyncio.create_task(keep_alive_logger())
     except Exception as e:
         logger.error(f"❌ Startup error: {e}", exc_info=True)
         raise
+
+
+async def keep_alive_logger():
+    """Log periodic keep-alive messages to detect crashes"""
+    import asyncio
+    import time
+    start_time = time.time()
+    counter = 0
+    
+    while True:
+        await asyncio.sleep(60)  # Log every 60 seconds
+        counter += 1
+        uptime = int(time.time() - start_time)
+        logger.info(f"💓 Keep-alive #{counter} - Uptime: {uptime}s ({uptime//60}m {uptime%60}s)")
+        
+        # Log memory usage if available
+        try:
+            import psutil
+            process = psutil.Process()
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            cpu_percent = process.cpu_percent(interval=1)
+            logger.info(f"📊 Resources: Memory={memory_mb:.1f}MB, CPU={cpu_percent:.1f}%")
+        except:
+            pass
 
 
 @app.on_event("shutdown")
