@@ -20,3 +20,6 @@ failureThreshold = 10
 [env]
 USE_GPU = "false"
 PYTHONUNBUFFERED = "1"
+PYTHONIOENCODING = "utf-8"
+# Suppress progress bars in downloads
+TQDM_DISABLE = "1"
