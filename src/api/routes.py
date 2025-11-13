@@ -51,12 +51,16 @@ if settings.main_api_url and settings.main_api_url != "http://localhost:8000/api
 # Initialize matcher (singleton pattern)
 # Parser uses direct functions, no initialization needed
 logger.info("Initializing card matcher...")
+logger.info(f"Card mapping path: {settings.card_mapping_path}")
+logger.info(f"Card mapping file exists: {os.path.exists(settings.card_mapping_path)}")
+
 try:
     matcher = CardMatcher(settings.card_mapping_path)
-    logger.info(f"Card matcher initialized successfully: {len(matcher.mappings)} cards loaded")
+    logger.info(f"✓ Card matcher initialized successfully: {len(matcher.mappings)} cards loaded")
 except Exception as e:
-    logger.error(f"Failed to initialize card matcher: {e}")
+    logger.error(f"❌ Failed to initialize card matcher: {e}", exc_info=True)
     matcher = None
+    # Don't fail startup - service can still respond to health checks
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -66,26 +70,45 @@ async def health_check():
     
     Returns service status and configuration
     """
-    if matcher is None:
+    try:
+        if matcher is None:
+            # Service is running but matcher failed to load
+            # Return 200 (not 503) so Railway doesn't restart
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "degraded",
+                    "service": settings.app_name,
+                    "version": settings.app_version,
+                    "matcher_loaded": False,
+                    "total_cards_in_db": 0,
+                    "warning": "Card matcher not initialized - OCR processing unavailable"
+                },
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive"
+                }
+            )
+        
+        return HealthResponse(
+            status="healthy",
+            service=settings.app_name,
+            version=settings.app_version,
+            matcher_loaded=matcher is not None,
+            total_cards_in_db=len(matcher.mappings) if matcher else 0
+        )
+    except Exception as e:
+        logger.error(f"Health check error: {e}", exc_info=True)
+        # Still return 200 to avoid restart loops
         return JSONResponse(
-            status_code=503,
+            status_code=200,
             content={
-                "status": "unhealthy",
+                "status": "error",
                 "service": settings.app_name,
                 "version": settings.app_version,
-                "matcher_loaded": False,
-                "total_cards_in_db": 0,
-                "error": "Card matcher not initialized"
+                "error": str(e)
             }
         )
-    
-    return HealthResponse(
-        status="healthy",
-        service=settings.app_name,
-        version=settings.app_version,
-        matcher_loaded=matcher is not None,
-        total_cards_in_db=len(matcher.mappings) if matcher else 0
-    )
 
 
 @router.get("/stats", response_model=StatsResponse)
