@@ -261,6 +261,92 @@ async def process_single_image(file: UploadFile = File(...)):
             logger.warning(f"Failed to delete temp file: {e}")
 
 
+@router.post("/process-stream")
+async def process_single_image_stream(file: UploadFile = File(...)):
+    """
+    Process a single decklist image with streaming progress (Server-Sent Events)
+    
+    - **file**: Image file (JPG/PNG) of Chinese decklist
+    
+    Streams progress updates and final result to keep connection alive during processing
+    """
+    if matcher is None:
+        raise HTTPException(status_code=503, detail="Card matcher not initialized")
+    
+    # Validate file
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File must be an image (JPG/PNG)")
+    
+    content = await file.read()
+    file_size_mb = len(content) / (1024 * 1024)
+    if file_size_mb > settings.max_file_size_mb:
+        raise HTTPException(status_code=400, detail=f"File size exceeds {settings.max_file_size_mb}MB")
+    
+    async def event_generator():
+        tmp_path = None
+        try:
+            # Save temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            
+            # Send progress: starting
+            yield format_sse_event("progress", {
+                "status": "starting",
+                "message": "Initializing OCR processing...",
+                "progress": 0
+            })
+            
+            # Stage 1: OCR
+            yield format_sse_event("progress", {
+                "status": "ocr",
+                "message": "Running OCR on image...",
+                "progress": 20
+            })
+            
+            import asyncio
+            loop = asyncio.get_event_loop()
+            parsed = await loop.run_in_executor(None, parse_with_two_stage, tmp_path)
+            
+            # Send progress: matching
+            yield format_sse_event("progress", {
+                "status": "matching",
+                "message": "Matching cards to database...",
+                "progress": 70
+            })
+            
+            # Stage 2: Match
+            matched = matcher.match_decklist(parsed)
+            matched['decklist_id'] = str(uuid.uuid4())
+            
+            # Send final result
+            yield format_sse_event("result", matched)
+            yield format_sse_event("complete", {"status": "success", "progress": 100})
+            
+        except Exception as e:
+            logger.error(f"Streaming processing failed: {e}", exc_info=True)
+            yield format_sse_event("error", {
+                "error": str(e),
+                "message": f"Processing failed: {str(e)}"
+            })
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file: {e}")
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
 @router.post("/process-batch", response_model=BatchProcessResponse)
 async def process_batch(files: List[UploadFile] = File(...)):
     """
