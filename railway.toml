@@ -12,7 +12,7 @@ restartPolicyMaxRetries = 10
 
 [[deploy.healthcheckProbes]]
 path = "/health"
-initialDelaySeconds = 120  # Both PaddleOCR + EasyOCR pre-load (~90-120s first run)
+initialDelaySeconds = 30  # Only PaddleOCR pre-loads (~15-30s), EasyOCR lazy-loads
 periodSeconds = 60
 timeoutSeconds = 30
 failureThreshold = 10

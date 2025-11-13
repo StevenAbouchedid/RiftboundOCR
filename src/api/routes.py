@@ -84,35 +84,18 @@ except Exception as e:
     logger.error(f"PaddleOCR init failed: {e}", exc_info=True)
     _ocr_paddle = None
 
-print("\n[3/3] Pre-loading EasyOCR (English/numeric recognition)...")
-print("      This downloads ~100MB of models on first run (60-90 seconds)")
-print("      Subsequent starts will be instant (models cached)")
-print("      ⚠ This prevents 20+ second timeouts on first request!")
-
-try:
-    from src.ocr.parser import get_easy_reader
-    start = time.time()
-    _ocr_easy = get_easy_reader()  # Force initialization NOW
-    elapsed = time.time() - start
-    print(f"✓ EasyOCR ready ({elapsed:.1f}s)")
-    logger.info(f"EasyOCR pre-loaded in {elapsed:.1f}s")
-except Exception as e:
-    print(f"⚠ WARNING: EasyOCR initialization failed: {e}")
-    print("   Quantity detection will be unavailable!")
-    import traceback
-    traceback.print_exc()
-    logger.warning(f"EasyOCR init failed: {e}", exc_info=True)
-    _ocr_easy = None
+print("\n[3/3] EasyOCR (English/numeric recognition)...")
+print("      ⚠ SKIPPING pre-load to meet Railway's 5-minute healthcheck timeout")
+print("      EasyOCR will initialize on first use (adds 15-30s to first request)")
+print("      This is a Railway deployment constraint - models too large to pre-load")
+_ocr_easy = None  # Lazy-load on demand
 
 print("\n" + "=" * 60)
-if _ocr_paddle and _ocr_easy:
-    print("✅ ALL OCR MODELS PRE-LOADED - SERVICE READY!")
+if _ocr_paddle:
+    print("✅ CORE OCR MODELS PRE-LOADED - SERVICE READY!")
     print("   PaddleOCR: ✓ Ready (Chinese text)")
-    print("   EasyOCR: ✓ Ready (English/numeric)")
-elif _ocr_paddle:
-    print("⚠️  PARTIAL OCR INITIALIZATION - PaddleOCR only")
-    print("   PaddleOCR: ✓ Ready (Chinese text)")
-    print("   EasyOCR: ❌ Failed (quantity detection unavailable)")
+    print("   EasyOCR: ⏳ Lazy-load (will initialize on first request)")
+    print("   ⚠ First OCR request may take 20-30s (EasyOCR downloading)")
 else:
     print("❌ OCR INITIALIZATION FAILED - Service will not work")
 print("=" * 60 + "\n")
