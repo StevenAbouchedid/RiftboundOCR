@@ -85,25 +85,18 @@ except Exception as e:
     _ocr_paddle = None
 
 print("\n[3/3] Pre-loading EasyOCR (English/numeric recognition)...")
-try:
-    from src.ocr.parser import get_easy_reader
-    start = time.time()
-    _ocr_easy = get_easy_reader()  # Force initialization NOW
-    elapsed = time.time() - start
-    print(f"✓ EasyOCR ready ({elapsed:.1f}s)")
-    logger.info(f"EasyOCR pre-loaded in {elapsed:.1f}s")
-except Exception as e:
-    print(f"❌ CRITICAL: EasyOCR initialization failed: {e}")
-    import traceback
-    traceback.print_exc()
-    logger.error(f"EasyOCR init failed: {e}", exc_info=True)
-    _ocr_easy = None
+print("      Skipping EasyOCR pre-load to speed up startup")
+print("      EasyOCR will load on-demand when needed for metadata extraction")
+_ocr_easy = None  # Skip pre-loading EasyOCR (loaded lazily when needed)
+print("✓ EasyOCR configured for lazy loading")
 
 print("\n" + "=" * 60)
-if _ocr_paddle and _ocr_easy:
-    print("✅ ALL OCR MODELS PRE-LOADED - SERVICE READY!")
+if _ocr_paddle:
+    print("✅ CORE OCR MODELS PRE-LOADED - SERVICE READY!")
+    print("   PaddleOCR: ✓ Ready (Chinese text)")
+    print("   EasyOCR: ⏳ Lazy load (English/numeric)")
 else:
-    print("⚠️  OCR INITIALIZATION INCOMPLETE - Some features unavailable")
+    print("⚠️  OCR INITIALIZATION INCOMPLETE - Service may not work")
 print("=" * 60 + "\n")
 logger.info("OCR service components initialization complete")
 

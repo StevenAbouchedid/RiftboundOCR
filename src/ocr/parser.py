@@ -39,7 +39,11 @@ def get_paddle_ocr():
     if _ocr is None:
         print("[OCR] Initializing PaddleOCR... This may take 20-40 seconds on first run.")
         try:
-            _ocr = PaddleOCR(use_textline_orientation=True, lang='ch')
+            _ocr = PaddleOCR(
+                use_textline_orientation=True, 
+                lang='ch',
+                show_log=False  # Disable verbose logging
+            )
             print("[OCR] PaddleOCR ready")
         except Exception as e:
             print(f"[OCR ERROR] Failed to initialize PaddleOCR: {e}")
