@@ -565,7 +565,7 @@ def parse_with_two_stage(image_path: str):
     all_areas = [s['area'] for s in sections]
     
     for i, section in enumerate(sections):
-        section_type = classify_section_type(full_image, section['box'], i+1, all_areas)
+        section_type = classify_section_type(full_image, section['box'], i+1, all_areas, len(sections))
         section['type'] = section_type
         section['y'] = section['box'][1]  # Store y-coordinate for sorting
     
@@ -850,7 +850,7 @@ def detect_duplicate_sections(sections: List[Dict], full_image: Image.Image) -> 
 
 
 def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, int, int], index: int,
-                           all_areas: List[float]) -> str:
+                           all_areas: List[float], total_sections: int) -> str:
     x, y, w, h = section_box
     header_height = max(50, min(int(h * 0.2), 140))
     header_crop = full_image.crop((x + 5, y, x + w - 5, y + header_height))
@@ -877,9 +877,10 @@ def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, 
         if any(key in normalized for key in HEADER_KEYWORDS['main_deck']):
             return 'legend_main'
 
-    # Fallback to area-based ordering
+    # Fallback: Use area-based ordering, but side deck is almost always the LAST section
     sorted_areas = sorted(all_areas, reverse=True)
     section_area = w * h
+    
     if section_area == sorted_areas[0]:
         return 'legend_main'
     elif section_area == sorted_areas[1]:
@@ -887,7 +888,13 @@ def classify_section_type(full_image: Image.Image, section_box: Tuple[int, int, 
     elif section_area == sorted_areas[2]:
         return 'runes'
     else:
-        return 'side_deck'
+        # For remaining small sections:
+        # - Only the VERY LAST section defaults to side_deck
+        # - All others are likely runes (OCR failed to read "符文" header)
+        if index == total_sections:  # Only the very last section
+            return 'side_deck'
+        else:
+            return 'runes'  # All other middle sections are likely runes
 
 
 if __name__ == "__main__":
