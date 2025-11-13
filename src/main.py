@@ -47,16 +47,20 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup"""
-    logger.info("=" * 60)
-    logger.info(f"🚀 {settings.app_name} v{settings.app_version}")
-    logger.info("=" * 60)
-    logger.info(f"Debug mode: {settings.debug}")
-    logger.info(f"GPU enabled: {settings.use_gpu}")
-    logger.info(f"Card mapping: {settings.card_mapping_path}")
-    logger.info(f"Max file size: {settings.max_file_size_mb}MB")
-    logger.info(f"Max batch size: {settings.max_batch_size}")
-    logger.info("=" * 60)
-    logger.info("Service starting...")
+    try:
+        logger.info("=" * 60)
+        logger.info(f"🚀 {settings.app_name} v{settings.app_version}")
+        logger.info("=" * 60)
+        logger.info(f"Debug mode: {settings.debug}")
+        logger.info(f"GPU enabled: {settings.use_gpu}")
+        logger.info(f"Card mapping: {settings.card_mapping_path}")
+        logger.info(f"Max file size: {settings.max_file_size_mb}MB")
+        logger.info(f"Max batch size: {settings.max_batch_size}")
+        logger.info("=" * 60)
+        logger.info("✓ Application startup complete")
+    except Exception as e:
+        logger.error(f"❌ Startup error: {e}", exc_info=True)
+        raise
 
 
 @app.on_event("shutdown")
@@ -86,6 +90,20 @@ async def root():
             "health": "GET /api/v1/health",
             "stats": "GET /api/v1/stats"
         }
+    }
+
+
+@app.get("/health")
+async def health_simple():
+    """
+    Simple health check endpoint (root level for frontend compatibility)
+    
+    Returns basic status - for full info use /api/v1/health
+    """
+    return {
+        "status": "healthy",
+        "service": settings.app_name,
+        "version": settings.app_version
     }
 
 
