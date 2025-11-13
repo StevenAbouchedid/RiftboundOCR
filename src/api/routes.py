@@ -49,45 +49,63 @@ if settings.main_api_url and settings.main_api_url != "http://localhost:8000/api
         logger.warning(f"Failed to initialize main API client: {e}")
 
 # Initialize matcher (singleton pattern)
-logger.info("Initializing card matcher...")
-logger.info(f"Card mapping path: {settings.card_mapping_path}")
-logger.info(f"Card mapping file exists: {os.path.exists(settings.card_mapping_path)}")
+print("\n" + "=" * 60)
+print("⚙️  INITIALIZING OCR SERVICE COMPONENTS")
+print("=" * 60)
+print(f"[1/3] Loading card matcher from: {settings.card_mapping_path}")
+print(f"      File exists: {os.path.exists(settings.card_mapping_path)}")
 
 try:
     matcher = CardMatcher(settings.card_mapping_path)
-    logger.info(f"✓ Card matcher initialized successfully: {len(matcher.mappings)} cards loaded")
+    print(f"✓ Card matcher loaded: {len(matcher.mappings)} cards indexed")
+    logger.info(f"Card matcher initialized: {len(matcher.mappings)} cards")
 except Exception as e:
-    logger.error(f"❌ Failed to initialize card matcher: {e}", exc_info=True)
+    print(f"❌ FAILED to load card matcher: {e}")
+    logger.error(f"Failed to initialize card matcher: {e}", exc_info=True)
     matcher = None
-    # Don't fail startup - service can still respond to health checks
 
-# Pre-initialize OCR models at startup to avoid timeout on first request
-print("\n" + "=" * 60)
-print("🔄 PRE-INITIALIZING OCR MODELS (60-90 seconds)...")
-print("=" * 60)
+# Pre-initialize OCR models at module import (CRITICAL for Railway deployment)
+print("\n[2/3] Pre-loading PaddleOCR (Chinese text recognition)...")
+print("      This downloads ~15MB of models on first run (60-90 seconds)")
+print("      Subsequent starts will be instant (models cached)")
+
 try:
-    from src.ocr.parser import get_paddle_ocr, get_easy_reader
-    
-    print("[OCR] Loading PaddleOCR (Chinese)...")
+    from src.ocr.parser import get_paddle_ocr
     import time
     start = time.time()
-    get_paddle_ocr()
-    print(f"✓ PaddleOCR loaded in {time.time() - start:.1f}s")
-    
-    print("[OCR] Loading EasyOCR (English)...")
-    start = time.time()
-    get_easy_reader()
-    print(f"✓ EasyOCR loaded in {time.time() - start:.1f}s")
-    
-    print("=" * 60)
-    print("✅ ALL OCR MODELS PRE-LOADED AND READY!")
-    print("=" * 60)
-    logger.info("OCR models pre-initialized successfully")
+    _ocr_paddle = get_paddle_ocr()  # Force initialization NOW
+    elapsed = time.time() - start
+    print(f"✓ PaddleOCR ready ({elapsed:.1f}s)")
+    logger.info(f"PaddleOCR pre-loaded in {elapsed:.1f}s")
 except Exception as e:
-    print(f"❌ CRITICAL: Failed to pre-initialize OCR models: {e}")
+    print(f"❌ CRITICAL: PaddleOCR initialization failed: {e}")
     import traceback
     traceback.print_exc()
-    logger.error(f"Failed to pre-initialize OCR models: {e}", exc_info=True)
+    logger.error(f"PaddleOCR init failed: {e}", exc_info=True)
+    _ocr_paddle = None
+
+print("\n[3/3] Pre-loading EasyOCR (English/numeric recognition)...")
+try:
+    from src.ocr.parser import get_easy_reader
+    start = time.time()
+    _ocr_easy = get_easy_reader()  # Force initialization NOW
+    elapsed = time.time() - start
+    print(f"✓ EasyOCR ready ({elapsed:.1f}s)")
+    logger.info(f"EasyOCR pre-loaded in {elapsed:.1f}s")
+except Exception as e:
+    print(f"❌ CRITICAL: EasyOCR initialization failed: {e}")
+    import traceback
+    traceback.print_exc()
+    logger.error(f"EasyOCR init failed: {e}", exc_info=True)
+    _ocr_easy = None
+
+print("\n" + "=" * 60)
+if _ocr_paddle and _ocr_easy:
+    print("✅ ALL OCR MODELS PRE-LOADED - SERVICE READY!")
+else:
+    print("⚠️  OCR INITIALIZATION INCOMPLETE - Some features unavailable")
+print("=" * 60 + "\n")
+logger.info("OCR service components initialization complete")
 
 
 @router.get("/health", response_model=HealthResponse)
