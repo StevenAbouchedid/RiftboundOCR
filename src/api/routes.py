@@ -62,21 +62,32 @@ except Exception as e:
     # Don't fail startup - service can still respond to health checks
 
 # Pre-initialize OCR models at startup to avoid timeout on first request
-logger.info("Pre-initializing OCR models (this may take 60-90 seconds)...")
+print("\n" + "=" * 60)
+print("🔄 PRE-INITIALIZING OCR MODELS (60-90 seconds)...")
+print("=" * 60)
 try:
     from src.ocr.parser import get_paddle_ocr, get_easy_reader
-    logger.info("[OCR] Loading PaddleOCR...")
+    
+    print("[OCR] Loading PaddleOCR (Chinese)...")
+    import time
+    start = time.time()
     get_paddle_ocr()
-    logger.info("✓ PaddleOCR initialized")
+    print(f"✓ PaddleOCR loaded in {time.time() - start:.1f}s")
     
-    logger.info("[OCR] Loading EasyOCR...")
+    print("[OCR] Loading EasyOCR (English)...")
+    start = time.time()
     get_easy_reader()
-    logger.info("✓ EasyOCR initialized")
+    print(f"✓ EasyOCR loaded in {time.time() - start:.1f}s")
     
-    logger.info("✓ All OCR models pre-loaded and ready")
+    print("=" * 60)
+    print("✅ ALL OCR MODELS PRE-LOADED AND READY!")
+    print("=" * 60)
+    logger.info("OCR models pre-initialized successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to pre-initialize OCR models: {e}", exc_info=True)
-    logger.warning("OCR processing will be unavailable")
+    print(f"❌ CRITICAL: Failed to pre-initialize OCR models: {e}")
+    import traceback
+    traceback.print_exc()
+    logger.error(f"Failed to pre-initialize OCR models: {e}", exc_info=True)
 
 
 @router.get("/health", response_model=HealthResponse)
