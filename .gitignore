@@ -67,3 +67,6 @@ Thumbs.db
 # Project Specific
 temp_metadata.png
 benchmark_results.json
+
+# Sensitive Deployment Docs (contains passwords)
+DIGITALOCEAN_FRONTEND_REFERENCE.md

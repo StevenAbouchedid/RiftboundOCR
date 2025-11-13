@@ -7,30 +7,48 @@ Convert Chinese decklist screenshots to structured deck objects with English car
 **Input:** Chinese decklist image (JPG/PNG)  
 **Output:** Structured JSON with English card names and metadata  
 **Accuracy:** 93-96% card matching, 96% metadata extraction  
-**Processing Time:** 30-60 seconds per image
+**Processing Time:** 15-30 seconds per image (DigitalOcean) | 30-60 seconds (local)
 
 ---
 
-## 📚 **Complete Documentation**
+## 🚨 **DEPLOYMENT GUIDES** (Start Here!)
 
-### **🌟 [Complete API Reference & Hosting Guide](docs/COMPLETE_API_REFERENCE.md)** ⭐
-**The definitive technical documentation** covering:
-- ✅ All API routes with detailed examples
-- ✅ Request/response schemas (TypeScript)
-- ✅ Hosting guide (Railway, Docker, VPS)
-- ✅ Environment configuration
-- ✅ Performance & scaling strategies
-- ✅ Error handling & troubleshooting
+### **⭐ [DigitalOcean Deployment Guide](DIGITALOCEAN_DEPLOYMENT.md)** 
+**Current production deployment** - Complete step-by-step guide:
+- ✅ $12/month dedicated CPU (20x faster than Railway!)
+- ✅ Full Docker setup with Nginx reverse proxy
+- ✅ SSL certificate configuration with Let's Encrypt
+- ✅ Auto-deployment scripts
+- ✅ Performance monitoring
 
-### **Frontend Integration**
-- [Frontend Metadata Guide](docs/FRONTEND_METADATA_GUIDE.md) - Complete integration guide with React/Vue examples
-- [Frontend Quick Summary](FRONTEND_METADATA_SUMMARY.md) - Quick reference for new metadata fields
+### **🔐 [Frontend Integration Reference](DIGITALOCEAN_FRONTEND_REFERENCE.md)**
+**Critical for frontend team** - Includes:
+- ✅ API endpoint configuration (with SSL)
+- ✅ CORS setup and testing
+- ✅ Complete code examples
+- ✅ Server credentials (**SENSITIVE - Not in git**)
 
-### **More Documentation**
+### **Alternative Deployments**
+- [GCP Cloud Run Deployment](GCP_CLOUD_RUN_DEPLOYMENT.md) - Serverless with optional GPU ($15-30/month)
+- [Railway Deployment](docs/archive/) - Old deployment (archived, too slow)
+
+---
+
+## 📚 **Documentation**
+
+### **Core Documentation**
+- **[Complete API Reference](docs/COMPLETE_API_REFERENCE.md)** - All API routes, schemas, examples
+- **[Frontend Metadata Guide](docs/FRONTEND_METADATA_GUIDE.md)** - React/Vue integration examples
+- **[Streaming Guide](docs/FRONTEND_STREAMING_GUIDE.md)** - Server-Sent Events (SSE) implementation
+
+### **Quick Start Guides**
+- [Quick Start](docs/guides/QUICK_START.md) - Get running locally in 5 minutes
+- [Local Development](docs/guides/LOCAL_DEVELOPMENT.md) - Development setup
+- [Troubleshooting](docs/guides/TROUBLESHOOTING.md) - Common issues
+
+### **Reference**
 - [Documentation Index](docs/README.md) - Browse all documentation
-- [Quick Start Guide](QUICK_START.md) - Get running in 5 minutes
-- [Deployment Guide](DEPLOYMENT.md) - Production deployment
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues
+- [API Routes Frontend](docs/reference/API_ROUTES_FRONTEND.md) - Frontend-specific API docs
 
 ---
 
@@ -288,7 +306,11 @@ OCR models need 2-4GB RAM. Increase Docker memory or use larger instance.
 
 ---
 
-**Status:** In Development  
+## 📍 Current Status
+
+**Deployment:** ✅ DigitalOcean Droplet (IP: 104.248.221.40)  
+**Domain:** 🔄 Setting up SSL at `ocr.riftboundtopdecks.com`  
+**Performance:** 🚀 15-30 seconds (20x faster than Railway!)  
 **Version:** 1.0.0  
-**Last Updated:** November 11, 2025
+**Last Updated:** November 13, 2025
 
