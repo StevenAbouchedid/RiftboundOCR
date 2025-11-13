@@ -49,7 +49,6 @@ if settings.main_api_url and settings.main_api_url != "http://localhost:8000/api
         logger.warning(f"Failed to initialize main API client: {e}")
 
 # Initialize matcher (singleton pattern)
-# Parser uses direct functions, no initialization needed
 logger.info("Initializing card matcher...")
 logger.info(f"Card mapping path: {settings.card_mapping_path}")
 logger.info(f"Card mapping file exists: {os.path.exists(settings.card_mapping_path)}")
@@ -61,6 +60,23 @@ except Exception as e:
     logger.error(f"❌ Failed to initialize card matcher: {e}", exc_info=True)
     matcher = None
     # Don't fail startup - service can still respond to health checks
+
+# Pre-initialize OCR models at startup to avoid timeout on first request
+logger.info("Pre-initializing OCR models (this may take 60-90 seconds)...")
+try:
+    from src.ocr.parser import get_paddle_ocr, get_easy_reader
+    logger.info("[OCR] Loading PaddleOCR...")
+    get_paddle_ocr()
+    logger.info("✓ PaddleOCR initialized")
+    
+    logger.info("[OCR] Loading EasyOCR...")
+    get_easy_reader()
+    logger.info("✓ EasyOCR initialized")
+    
+    logger.info("✓ All OCR models pre-loaded and ready")
+except Exception as e:
+    logger.error(f"❌ Failed to pre-initialize OCR models: {e}", exc_info=True)
+    logger.warning("OCR processing will be unavailable")
 
 
 @router.get("/health", response_model=HealthResponse)
